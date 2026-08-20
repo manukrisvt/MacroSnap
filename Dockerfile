@@ -10,13 +10,9 @@ RUN npm run build
 FROM node:20-slim AS runtime
 WORKDIR /app
 
-# Install root deps (React runtime, Capacitor core)
+# Install ALL deps (root package.json now includes server deps too)
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
-
-# Install SERVER deps (express, better-sqlite3, cors, dotenv)
-COPY server/package.json server/package-lock.json* ./server/
-RUN cd server && npm ci --omit=dev
 
 # Copy the built frontend + server source
 COPY --from=build /app/dist ./dist
