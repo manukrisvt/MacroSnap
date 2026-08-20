@@ -9,10 +9,18 @@ RUN npm run build
 # Runtime stage: serve API + static frontend
 FROM node:20-slim AS runtime
 WORKDIR /app
+
+# Install root deps (React runtime, Capacitor core)
 COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev
+
+# Install SERVER deps (express, better-sqlite3, cors, dotenv)
+COPY server/package.json server/package-lock.json* ./server/
+RUN cd server && npm ci --omit=dev
+
+# Copy the built frontend + server source
 COPY --from=build /app/dist ./dist
-COPY server/ ./server/
+COPY server/src/ ./server/src/
 COPY capacitor.config.json ./
 
 ENV HOST=0.0.0.0
