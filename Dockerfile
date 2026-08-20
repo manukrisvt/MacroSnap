@@ -16,6 +16,6 @@ COPY server/ ./server/
 COPY capacitor.config.json ./
 
 ENV HOST=0.0.0.0
-ENV PORT=8787
+# Don't set PORT here — Railway injects its own PORT at runtime.
 EXPOSE 8787
 CMD ["npm", "run", "start:prod"]
