@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: light;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior-y: none;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* large touch targets */
+button, a, [role="button"] {
+  touch-action: manipulation;
+}
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  border-radius: 9999px;
+  background: #e2e8f0;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 24px; height: 24px;
+  border-radius: 9999px;
+  background: #10b981;
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(0,0,0,.2);
+}

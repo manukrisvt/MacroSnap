@@ -1,0 +1,13 @@
+{
+  "appId": "com.macrosnap.app",
+  "appName": "MacroSnap",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "iosScheme": "https",
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "Camera": {}
+  }
+}

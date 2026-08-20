@@ -1,0 +1,44 @@
+{
+  "name": "macrosnap",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "MacroSnap — photo calorie tracking PWA",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "server": "node server/src/index.js",
+    "server:dev": "node --watch server/src/index.js",
+    "start": "concurrently -k -n web,api \"vite\" \"npm run server:dev\"",
+    "start:lan": "concurrently -k -n web,api \"vite --host\" \"npm run server:dev\"",
+    "start:prod": "node server/src/index.js",
+    "ios:build": "vite build && npx cap sync ios",
+    "ios:open": "npx cap open ios",
+    "ios:run": "vite build && npx cap sync ios && npx cap open ios",
+    "android:build": "vite build && npx cap sync android",
+    "android:open": "npx cap open android",
+    "android:run": "vite build && npx cap sync android && npx cap open android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/camera": "^8.2.3",
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
+    "@capacitor/ios": "^8.5.0",
+    "@capacitor/preferences": "^8.0.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.2"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.1",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13",
+    "typescript": "^7.0.2",
+    "vite": "^5.4.8",
+    "vite-plugin-pwa": "^0.20.5"
+  }
+}

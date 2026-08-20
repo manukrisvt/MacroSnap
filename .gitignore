@@ -1,0 +1,26 @@
+node_modules/
+dist/
+server/data/*.db
+server/data/*.db-journal
+.env
+.env.local
+*.log
+.DS_Store
+
+# iOS build artifacts (keep the source project, ignore derived data)
+ios/App/build/
+ios/App/Pods/
+ios/App/output/
+ios/DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Android build artifacts
+android/.gradle/
+android/app/build/
+android/build/
+android/captures/
+android/local.properties
+*.apk
+*.aab
+
