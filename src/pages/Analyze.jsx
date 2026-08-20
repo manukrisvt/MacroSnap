@@ -258,7 +258,7 @@ export default function Analyze() {
             </div>
           ))}
 
-          <div className="sticky bottom-24 z-10 rounded-2xl bg-slate-900 p-4 text-white shadow-xl">
+          <div className="mt-2 rounded-2xl bg-slate-900 p-4 text-white shadow-xl">
             <div className="flex items-center justify-between">
               <span className="text-sm text-slate-300">Total estimate</span>
               <span className="text-2xl font-bold">{totalCal} <span className="text-sm font-normal text-slate-400">kcal</span></span>
