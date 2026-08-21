@@ -73,6 +73,31 @@ app.post('/api/feedback', async (req, res) => {
 
 app.use(authMiddleware);
 
+// ---------- clear all data (admin) ----------
+app.post('/api/admin/clear-all', async (req, res) => {
+  const adminKey = req.body?.adminKey;
+  if (adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ error: 'Unauthorized.' });
+  }
+  try {
+    await db.run('DELETE FROM meal_items');
+    await db.run('DELETE FROM meals');
+    await db.run('DELETE FROM settings');
+    await db.run('DELETE FROM water');
+    await db.run('DELETE FROM weight_log');
+    await db.run('DELETE FROM favorites');
+    await db.run('DELETE FROM usage_log');
+    await db.run('DELETE FROM users');
+    // Re-seed default settings for user 0
+    for (const [k, v] of Object.entries({ calorie_goal: '2000', protein_goal: '150', carbs_goal: '225', fat_goal: '67', macro_unit: 'g' })) {
+      await db.run('INSERT INTO settings(user_id,key,value) VALUES(0,$1,$2) ON CONFLICT DO NOTHING', [k, v]);
+    }
+    res.json({ ok: true, message: 'All data cleared.' });
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to clear data.' });
+  }
+});
+
 // ---------- photo analysis ----------
 app.post('/api/analyze', async (req, res) => {
   try {
