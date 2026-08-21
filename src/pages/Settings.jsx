@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api, logout, getStoredEmail } from '../lib/api.js';
+import { api, logout } from '../lib/api.js';
 import { todayStr, formatDate } from '../lib/image.js';
 import { getAISettings, saveAISettings, PROVIDERS } from '../lib/aiSettings.js';
 import Header from '../components/Header.jsx';
@@ -36,49 +36,84 @@ export default function Settings() {
   }
 
   const macroUnit = s.macro_unit || 'g';
+  const byoActive = ai?.aiMode === 'byo' && ai?.byoApiKey;
 
   return (
-    <div className="px-4">
-      <Header title="Settings" subtitle="Goals & profile" />
+    <div className="px-4 pb-8">
+      <Header title="Settings" />
 
-      {/* Account + tier badge */}
-      {profile && (
-        <div className="mt-3 flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm">
-          <div>
-            <p className="text-sm font-semibold text-slate-800">{profile.name || profile.email}</p>
-            <p className="text-xs text-slate-400">{profile.email}</p>
+      {/* ===== PROFILE CARD ===== */}
+      {profile ? (
+        <div className="mt-3 overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white shadow-lg">
+          <div className="flex items-center gap-4">
+            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-brand-500 text-2xl font-bold">
+              {(profile.name || profile.email || '?')[0].toUpperCase()}
+            </div>
+            <div className="flex-1">
+              <p className="text-base font-bold">{profile.name || 'User'}</p>
+              <p className="text-xs text-slate-400">{profile.email}</p>
+            </div>
           </div>
-          <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${
-            profile.isPremium
-              ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-white'
-              : 'bg-slate-100 text-slate-500'
-          }`}>
-            {profile.isPremium ? '⭐ PREMIUM' : 'FREE TIER'}
-          </span>
+
+          {/* Tier badges */}
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            {profile.isPremium ? (
+              <span className="rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-3 py-1 text-xs font-bold text-white">
+                ⭐ PREMIUM
+              </span>
+            ) : (
+              <span className="rounded-full bg-slate-700 px-3 py-1 text-xs font-bold text-slate-300">
+                FREE TIER
+              </span>
+            )}
+            {byoActive && (
+              <span className="rounded-full bg-brand-500/20 px-3 py-1 text-xs font-bold text-brand-300">
+                🔑 BYO KEY
+              </span>
+            )}
+          </div>
+
+          {/* Quota bar (free tier only) */}
+          {!profile.isPremium && (
+            <div className="mt-4">
+              <div className="flex items-center justify-between text-xs text-slate-400">
+                <span>Cloud snaps</span>
+                <span>{profile.quota.used}/{profile.quota.limit} used · {profile.quota.remaining} left</span>
+              </div>
+              <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-700">
+                <div className="h-full rounded-full bg-brand-500 transition-all"
+                  style={{ width: `${Math.min(100, (profile.quota.used / profile.quota.limit) * 100)}%` }} />
+              </div>
+            </div>
+          )}
+
+          {profile.isPremium && (
+            <p className="mt-3 text-xs text-slate-400">Unlimited cloud photo analyses included.</p>
+          )}
         </div>
+      ) : (
+        <div className="mt-3 rounded-2xl bg-white p-5 text-center text-sm text-slate-400">Loading profile…</div>
       )}
 
-      {/* Quota display for free users */}
-      {profile && !profile.isPremium && (
-        <div className="mt-2 rounded-xl bg-slate-100 px-4 py-3 text-xs text-slate-500">
-          <div className="flex items-center justify-between">
-            <span>📸 Server snaps: {profile.quota.used}/{profile.quota.limit} used</span>
-            <span className="font-medium text-brand-600">{profile.quota.remaining} left</span>
-          </div>
-          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
-            <div className="h-full rounded-full bg-brand-500" style={{ width: `${(profile.quota.used / profile.quota.limit) * 100}%` }} />
-          </div>
-          <p className="mt-2 text-[11px] text-slate-400">
-            Add your own API key (above) for unlimited free snaps, or upgrade to Premium.
+      {/* ===== PLAN STATUS ===== */}
+      <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-700">Plan</h2>
+        <div className="mt-2 space-y-2">
+          <PlanRow icon="🔑" label="BYO API Key" value={byoActive ? 'Active · Unlimited' : 'Not set up'} active={byoActive} />
+          <PlanRow icon="⭐" label="Premium" value={profile?.isPremium ? 'Active' : 'Not subscribed'} active={profile?.isPremium} />
+          <PlanRow icon="📸" label="Cloud Snaps" value={profile?.isPremium ? 'Unlimited' : `${profile?.quota?.remaining || 0}/${profile?.quota?.limit || 3} left`} active={!profile?.isPremium} />
+        </div>
+        {!byoActive && !profile?.isPremium && (
+          <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+            Add your own API key below for unlimited free snaps — no subscription needed.
           </p>
-        </div>
-      )}
+        )}
+      </section>
 
-      {/* AI Provider — BYO key vs server key */}
-      {ai && (
-        <AIProviderSection ai={ai} setAI={setAI} saved={aiSaved} setSaved={setAISaved} />
-      )}
+      {/* ===== AI PROVIDER ===== */}
+      {ai && <AIProviderSection ai={ai} setAI={setAI} saved={aiSaved} setSaved={setAISaved} />}
 
+      {/* ===== GOALS ===== */}
       <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-700">Daily calorie goal</h2>
         <input type="number" inputMode="numeric" value={s.calorie_goal || ''}
@@ -92,9 +127,9 @@ export default function Settings() {
           <div className="flex gap-1 rounded-lg bg-slate-100 p-0.5">
             {['g', 'percent'].map((u) => (
               <button key={u} onClick={() => update('macro_unit', u)}
-                className={`rounded-md px-3 py-1 text-xs font-medium ${
-                  macroUnit === u ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'
-                }`}>{u === 'g' ? 'grams' : '% of cal'}</button>
+                className={`rounded-md px-3 py-1 text-xs font-medium ${macroUnit === u ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>
+                {u === 'g' ? 'grams' : '% of cal'}
+              </button>
             ))}
           </div>
         </div>
@@ -113,6 +148,7 @@ export default function Settings() {
         {saved ? 'Saved ✓' : 'Save goals'}
       </button>
 
+      {/* ===== WEIGHT LOG ===== */}
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-700">Weight log</h2>
         <div className="mt-2 flex gap-2">
@@ -133,149 +169,110 @@ export default function Settings() {
         </div>
       </section>
 
-      <p className="mt-6 text-center text-[11px] text-slate-400">MacroSnap v1.0 · single-user, local SQLite</p>
-
+      {/* ===== LOGOUT ===== */}
       <button
         onClick={() => { if (confirm('Log out?')) { logout(); window.location.reload(); } }}
-        className="mt-3 w-full rounded-xl border border-rose-200 bg-rose-50 py-3 text-sm font-semibold text-rose-600 active:scale-[.98]"
-      >Log out{getStoredEmail() ? ` (${getStoredEmail()})` : ''}</button>
+        className="mt-5 w-full rounded-xl border border-rose-200 bg-rose-50 py-3 text-sm font-semibold text-rose-600 active:scale-[.98]"
+      >Log out</button>
+
+      <p className="mt-4 text-center text-[11px] text-slate-400">MacroSnap v1.0</p>
+    </div>
+  );
+}
+
+function PlanRow({ icon, label, value, active }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg bg-slate-50 px-3 py-2.5">
+      <div className="flex items-center gap-2">
+        <span className="text-base">{icon}</span>
+        <span className="text-sm text-slate-700">{label}</span>
+      </div>
+      <span className={`text-xs font-semibold ${active ? 'text-brand-600' : 'text-slate-400'}`}>{value}</span>
     </div>
   );
 }
 
 function AIProviderSection({ ai, setAI, saved, setSaved }) {
   const provider = PROVIDERS.find((p) => p.id === ai.byoProvider) || PROVIDERS[0];
-
-  function update(field, value) {
-    setAI((p) => ({ ...p, [field]: value }));
-  }
-
+  function update(field, value) { setAI((p) => ({ ...p, [field]: value })); }
   function selectProvider(id) {
     const p = PROVIDERS.find((x) => x.id === id);
-    setAI((prev) => ({
-      ...prev,
-      byoProvider: id,
-      byoBaseUrl: p.baseUrl || prev.byoBaseUrl
-    }));
+    setAI((prev) => ({ ...prev, byoProvider: id, byoBaseUrl: p.baseUrl || prev.byoBaseUrl }));
   }
-
   async function save() {
     await saveAISettings(ai);
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   }
-
   return (
     <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
       <div className="flex items-center gap-2">
         <span className="text-base">🤖</span>
         <h2 className="text-sm font-semibold text-slate-700">AI Provider</h2>
       </div>
-
-      {/* Mode toggle */}
       <div className="mt-3 flex gap-1 rounded-xl bg-slate-100 p-1">
-        <button
-          onClick={() => update('aiMode', 'server')}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${
-            ai.aiMode === 'server' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'
-          }`}
-        >☁️ Use MacroSnap Cloud (Premium)</button>
-        <button
-          onClick={() => update('aiMode', 'byo')}
-          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${
-            ai.aiMode === 'byo' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'
-          }`}
-        >🔑 Bring Your Own Key (Free)</button>
+        <button onClick={() => update('aiMode', 'server')}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${ai.aiMode === 'server' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>
+          ☁️ Cloud Key
+        </button>
+        <button onClick={() => update('aiMode', 'byo')}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${ai.aiMode === 'byo' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'}`}>
+          🔑 BYO Key
+        </button>
       </div>
-
       {ai.aiMode === 'server' ? (
         <p className="mt-3 text-xs text-slate-500">
-          Photo analysis runs through MacroSnap's cloud server. Uses our API key —
-          a subscription may be required for heavy use. Works out of the box, no setup needed.
+          Uses MacroSnap's cloud API key. Free tier: 3 snaps. Premium: unlimited. No setup needed.
         </p>
       ) : (
         <div className="mt-3 space-y-3">
           <p className="text-xs text-slate-500">
-            Use your own AI API key — calls go directly from your device to the provider.
-            <strong className="text-slate-700"> Free, unlimited.</strong> Your key is stored
-            only on this device and never sent to our server.
+            Use your own AI API key — calls go directly from your device.
+            <strong className="text-slate-700"> Free, unlimited.</strong>
+            Key stored on-device only, never sent to our server.
           </p>
-
-          {/* Provider dropdown */}
           <div>
             <label className="text-xs font-medium text-slate-600">Provider</label>
-            <select
-              value={ai.byoProvider}
-              onChange={(e) => selectProvider(e.target.value)}
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-            >
-              {PROVIDERS.map((p) => (
-                <option key={p.id} value={p.id}>{p.label}</option>
-              ))}
+            <select value={ai.byoProvider} onChange={(e) => selectProvider(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+              {PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
             </select>
           </div>
-
-          {/* API key */}
           <div>
             <label className="text-xs font-medium text-slate-600">API Key</label>
-            <input
-              type="password"
-              value={ai.byoApiKey || ''}
-              onChange={(e) => update('byoApiKey', e.target.value)}
-              placeholder="sk-..."
-              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono"
-            />
+            <input type="password" value={ai.byoApiKey || ''} onChange={(e) => update('byoApiKey', e.target.value)}
+              placeholder="sk-..." className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono" />
             {provider.helpUrl && (
               <a href={provider.helpUrl} target="_blank" rel="noopener noreferrer"
-                className="mt-1 block text-[11px] text-brand-600">
-                Get a key →
-              </a>
+                className="mt-1 block text-[11px] text-brand-600">Get a key →</a>
             )}
           </div>
-
-          {/* Model selection */}
           {provider.models.length > 0 ? (
             <div>
               <label className="text-xs font-medium text-slate-600">Model</label>
-              <select
-                value={ai.byoModel}
-                onChange={(e) => update('byoModel', e.target.value)}
-                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
-              >
-                {provider.models.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
-                ))}
+              <select value={ai.byoModel} onChange={(e) => update('byoModel', e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm">
+                {provider.models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
               </select>
             </div>
           ) : (
             <>
               <div>
                 <label className="text-xs font-medium text-slate-600">Base URL</label>
-                <input
-                  type="text"
-                  value={ai.byoBaseUrl || ''}
-                  onChange={(e) => update('byoBaseUrl', e.target.value)}
-                  placeholder="https://api.example.com/v1"
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono"
-                />
+                <input type="text" value={ai.byoBaseUrl || ''} onChange={(e) => update('byoBaseUrl', e.target.value)}
+                  placeholder="https://api.example.com/v1" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono" />
               </div>
               <div>
                 <label className="text-xs font-medium text-slate-600">Model ID</label>
-                <input
-                  type="text"
-                  value={ai.byoModel || ''}
-                  onChange={(e) => update('byoModel', e.target.value)}
-                  placeholder="model-name"
-                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono"
-                />
+                <input type="text" value={ai.byoModel || ''} onChange={(e) => update('byoModel', e.target.value)}
+                  placeholder="model-name" className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono" />
               </div>
             </>
           )}
-
-          <button
-            onClick={save}
-            className="w-full rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white active:scale-[.98]"
-          >{saved ? 'Saved ✓' : 'Save AI Settings'}</button>
+          <button onClick={save}
+            className="w-full rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white active:scale-[.98]">
+            {saved ? 'Saved ✓' : 'Save AI Settings'}
+          </button>
         </div>
       )}
     </section>
@@ -286,8 +283,7 @@ function MacroInput({ label, value, onChange, unit, color }) {
   return (
     <div className="rounded-xl bg-slate-50 p-2 text-center">
       <div className={`text-xs font-semibold ${color}`}>{label}</div>
-      <input type="number" inputMode="numeric" value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
+      <input type="number" inputMode="numeric" value={value || ''} onChange={(e) => onChange(e.target.value)}
         className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-center text-sm font-semibold" />
       <div className="mt-0.5 text-[9px] text-slate-400">{unit === 'g' ? 'grams' : '%'}</div>
     </div>
