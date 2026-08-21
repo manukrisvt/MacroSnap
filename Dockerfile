@@ -20,6 +20,9 @@ COPY server/src/ ./server/src/
 COPY capacitor.config.json ./
 
 ENV HOST=0.0.0.0
+# Railway persistent volume mounts at /data — set DATA_DIR so SQLite writes there
+ENV DATA_DIR=/data
+RUN mkdir -p /data
 # Don't set PORT here — Railway injects its own PORT at runtime.
 EXPOSE 8787
 CMD ["npm", "run", "start:prod"]
