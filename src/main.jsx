@@ -5,6 +5,7 @@ import './index.css';
 import App from './App.jsx';
 import { isLoggedIn, logout } from './lib/api.js';
 import Login from './pages/Login.jsx';
+import Onboarding from './pages/Onboarding.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Analyze from './pages/Analyze.jsx';
 import History from './pages/History.jsx';
@@ -15,7 +16,15 @@ import Favorites from './pages/Favorites.jsx';
 
 function AuthGate() {
   const [authed, setAuthed] = React.useState(isLoggedIn());
+  const [onboarded, setOnboarded] = React.useState(() => {
+    try { return localStorage.getItem('macrosnap_onboarded') === 'true'; } catch { return false; }
+  });
+
   if (!authed) return <Login onAuthed={() => setAuthed(true)} />;
+  if (!onboarded) return <Onboarding onDone={() => {
+    try { localStorage.setItem('macrosnap_onboarded', 'true'); } catch {}
+    setOnboarded(true);
+  }} />;
   return (
     <Routes>
       <Route path="/" element={<App onLogout={() => { logout(); setAuthed(false); }} />}>

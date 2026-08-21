@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api, logout } from '../lib/api.js';
 import { todayStr, formatDate } from '../lib/image.js';
 import { getAISettings, saveAISettings, PROVIDERS } from '../lib/aiSettings.js';
+import { analyzeMealImageDirect } from '../lib/clientAI.js';
 import Header from '../components/Header.jsx';
 
 export default function Settings() {
@@ -169,10 +170,44 @@ export default function Settings() {
         </div>
       </section>
 
+      {/* ===== FEEDBACK ===== */}
+      <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-700">Feedback</h2>
+        <p className="mt-1 text-xs text-slate-400">Report a bug or suggest a feature.</p>
+        <textarea id="feedback-msg" placeholder="What went wrong? What's missing?"
+          className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" rows={3} />
+        <button onClick={async () => {
+          const el = document.getElementById('feedback-msg');
+          const msg = el?.value?.trim();
+          if (!msg) return;
+          try { await api.feedback(msg, 'bug'); el.value = ''; alert('Thanks! Feedback sent.'); }
+          catch { alert('Could not send feedback. Try again later.'); }
+        }} className="mt-2 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white">
+          Send feedback
+        </button>
+      </section>
+
+      {/* ===== DANGER ZONE ===== */}
+      <details className="mt-5 rounded-2xl border border-rose-200 bg-rose-50 p-4">
+        <summary className="cursor-pointer text-sm font-semibold text-rose-600">Danger zone</summary>
+        <button
+          onClick={async () => {
+            if (!confirm('This permanently deletes your account and ALL data. This cannot be undone. Continue?')) return;
+            if (!confirm('Are you absolutely sure? All meals, history, and settings will be lost.')) return;
+            try {
+              await api.deleteAccount();
+              logout();
+              window.location.reload();
+            } catch { alert('Failed to delete account. Please try again.'); }
+          }}
+          className="mt-3 w-full rounded-xl border border-rose-300 bg-white py-3 text-sm font-semibold text-rose-600 active:scale-[.98]"
+        >Delete my account</button>
+      </details>
+
       {/* ===== LOGOUT ===== */}
       <button
         onClick={() => { if (confirm('Log out?')) { logout(); window.location.reload(); } }}
-        className="mt-5 w-full rounded-xl border border-rose-200 bg-rose-50 py-3 text-sm font-semibold text-rose-600 active:scale-[.98]"
+        className="mt-5 w-full rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-600 active:scale-[.98]"
       >Log out</button>
 
       <p className="mt-4 text-center text-[11px] text-slate-400">MacroSnap v1.0</p>
@@ -273,6 +308,24 @@ function AIProviderSection({ ai, setAI, saved, setSaved }) {
             className="w-full rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white active:scale-[.98]">
             {saved ? 'Saved ✓' : 'Save AI Settings'}
           </button>
+          <button onClick={async () => {
+            const btn = document.getElementById('test-key-result');
+            if (btn) btn.textContent = 'Testing…';
+            try {
+              // Send a tiny test request to verify the key works
+              const testUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARAAEAAQADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q=';
+              await analyzeMealImageDirect(testUrl, ai);
+              if (btn) btn.textContent = '✅ Key works! Ready to snap.';
+              if (btn) btn.className = 'mt-2 text-xs text-brand-600';
+            } catch (e) {
+              if (btn) btn.textContent = '❌ ' + (e.message || 'Key test failed');
+              if (btn) btn.className = 'mt-2 text-xs text-rose-500';
+            }
+          }}
+            className="w-full rounded-xl border border-slate-200 bg-white py-2.5 text-sm font-medium text-slate-600 active:scale-[.98]">
+            Test key
+          </button>
+          <p id="test-key-result" className="mt-2 text-xs text-slate-400"></p>
         </div>
       )}
     </section>

@@ -6,7 +6,7 @@ import { dirname, resolve } from 'path';
 import { existsSync } from 'fs';
 import { db, getAllSettings, setSetting } from './db.js';
 import { analyzeMealImage } from './moonshot.js';
-import { signup, login, authMiddleware, checkQuota, logSnap } from './auth.js';
+import { signup, login, authMiddleware, requireAuth, checkQuota, logSnap, deleteAccount, adminResetPassword, rateLimit } from './auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -16,8 +16,8 @@ app.use(express.json({ limit: '12mb' }));
 const PORT = process.env.PORT || 8787;
 const today = () => new Date().toISOString().slice(0, 10);
 
-// ---------- auth routes ----------
-app.post('/api/signup', async (req, res) => {
+// ---------- auth routes (rate limited) ----------
+app.post('/api/signup', rateLimit(), async (req, res) => {
   try {
     const { email, password, name } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'Email and password required.' });
@@ -27,13 +27,48 @@ app.post('/api/signup', async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
-app.post('/api/login', async (req, res) => {
+app.post('/api/login', rateLimit(), async (req, res) => {
   try {
     const { email, password } = req.body || {};
     if (!email || !password) return res.status(400).json({ error: 'Email and password required.' });
     const { userId, token } = await login(email, password);
     res.json({ userId, token, email });
   } catch (err) { res.status(401).json({ error: err.message }); }
+});
+
+// ---------- admin password reset (beta — no email needed) ----------
+app.post('/api/admin/reset-password', rateLimit(3), async (req, res) => {
+  try {
+    const { email, newPassword, adminKey } = req.body || {};
+    if (!email || !newPassword) return res.status(400).json({ error: 'Email and newPassword required.' });
+    const result = await adminResetPassword(email, newPassword, adminKey);
+    res.json(result);
+  } catch (err) {
+    res.status(err.code === 'UNAUTHORIZED' ? 403 : 400).json({ error: err.message });
+  }
+});
+
+// ---------- delete account ----------
+app.delete('/api/account', async (req, res) => {
+  try {
+    await deleteAccount(req.userId);
+    res.json({ ok: true });
+  } catch (err) { res.status(500).json({ error: 'Failed to delete account.' }); }
+});
+
+// ---------- feedback (logs to server console + stores in DB) ----------
+app.post('/api/feedback', async (req, res) => {
+  try {
+    const { message, type } = req.body || {};
+    if (!message) return res.status(400).json({ error: 'Message required.' });
+    console.log(`[feedback] user=${req.userId} type=${type||'bug'}: ${message}`);
+    // Store in usage_log as 'feedback' so it's queryable
+    await db.run(
+      'INSERT INTO usage_log(user_id, endpoint, created_at) VALUES($1,$2,$3)',
+      [req.userId, `feedback:${type||'bug'}:${message.slice(0,200)}`, Date.now()]
+    );
+    res.json({ ok: true });
+  } catch { res.status(500).json({ error: 'Failed to submit feedback.' }); }
 });
 
 app.use(authMiddleware);

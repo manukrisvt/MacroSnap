@@ -48,6 +48,12 @@ async function req(path, opts = {}) {
     headers,
     ...opts
   });
+  if (res.status === 401) {
+    // Token expired — clear auth and reload to login screen
+    logout();
+    if (typeof window !== 'undefined') window.location.reload();
+    throw new Error('Session expired. Please log in again.');
+  }
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
     try {
@@ -70,6 +76,8 @@ export const api = {
   usage: () => req('/usage'),
   me: () => req('/me'),
   barcode: (code) => req(`/barcode/${code}`),
+  deleteAccount: () => req('/account', { method: 'DELETE' }),
+  feedback: (message, type) => req('/feedback', { method: 'POST', body: JSON.stringify({ message, type }) }),
 
   analyze: (image, mimeType) =>
     req('/analyze', { method: 'POST', body: JSON.stringify({ image, mimeType }) }),
