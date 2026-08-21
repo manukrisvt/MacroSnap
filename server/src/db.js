@@ -56,17 +56,25 @@ if (process.env.DATABASE_URL) {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
 
+  // Convert $1, $2 style params (Postgres) to ? (SQLite) automatically
+  // Also strip RETURNING (SQLite doesn't support it; use lastInsertRowid instead)
+  const toSqlite = (sql) => sql.replace(/\$\d+/g, '?').replace(/RETURNING\s+\w+/gi, '');
+
+  // SQLite uses AUTOINCREMENT instead of SERIAL, and ? instead of $1
+  const PK = process.env.DATABASE_URL ? 'SERIAL PRIMARY KEY' : 'INTEGER PRIMARY KEY AUTOINCREMENT';
+  const LIKE = process.env.DATABASE_URL ? 'ILIKE' : 'LIKE';
+
   impl = {
-    exec(sql) { db.exec(sql); },
-    run(sql, params = []) { return db.prepare(sql).run(...params); },
-    get(sql, params = []) { return db.prepare(sql).get(...params); },
-    all(sql, params = []) { return db.prepare(sql).all(...params); },
+    exec(sql) { db.exec(sql.replace(/SERIAL PRIMARY KEY/g, PK)); },
+    run(sql, params = []) { return db.prepare(toSqlite(sql)).run(...params); },
+    get(sql, params = []) { return db.prepare(toSqlite(sql)).get(...params); },
+    all(sql, params = []) { return db.prepare(toSqlite(sql).replace(/ILIKE/g, 'LIKE')).all(...params); },
     transaction(fn) {
       const tx = db.transaction(fn);
       return tx({
-        run: (sql, params) => db.prepare(sql).run(...params),
-        get: (sql, params) => db.prepare(sql).get(...params),
-        all: (sql, params) => db.prepare(sql).all(...params),
+        run: (sql, params) => db.prepare(toSqlite(sql)).run(...params),
+        get: (sql, params) => db.prepare(toSqlite(sql)).get(...params),
+        all: (sql, params) => db.prepare(toSqlite(sql).replace(/ILIKE/g, 'LIKE')).all(...params),
       });
     }
   };
