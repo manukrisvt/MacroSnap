@@ -4,7 +4,9 @@ const { Pool } = pg;
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false } : undefined
+  ssl: process.env.DATABASE_URL ? { rejectUnauthorized: false, require: true } : undefined,
+  connectionTimeoutMillis: 10000,
+  max: 5
 });
 
 export const db = {
@@ -122,28 +124,44 @@ CREATE INDEX IF NOT EXISTS idx_meal_items_meal ON meal_items(meal_id);
 CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_log(user_id, created_at);
 `;
 
-await db.exec(SCHEMA);
+// Initialize schema with retry (Railway Postgres might not be ready immediately)
+async function initDB(retries = 5) {
+  for (let i = 0; i < retries; i++) {
+    try {
+      await db.exec(SCHEMA);
+      console.log('[db] schema created');
 
-// Seed default settings for user 0
-const sc = await db.get('SELECT COUNT(*) as c FROM settings WHERE user_id=0');
-if (sc?.c === 0 || sc?.c === '0') {
-  for (const [k, v] of Object.entries({ calorie_goal: '2000', protein_goal: '150', carbs_goal: '225', fat_goal: '67', macro_unit: 'g' })) {
-    await db.run('INSERT INTO settings(user_id,key,value) VALUES(0,$1,$2) ON CONFLICT DO NOTHING', [k, v]);
+      // Seed default settings for user 0
+      const sc = await db.get('SELECT COUNT(*) as c FROM settings WHERE user_id=0');
+      if (sc?.c === 0 || sc?.c === '0') {
+        for (const [k, v] of Object.entries({ calorie_goal: '2000', protein_goal: '150', carbs_goal: '225', fat_goal: '67', macro_unit: 'g' })) {
+          await db.run('INSERT INTO settings(user_id,key,value) VALUES(0,$1,$2) ON CONFLICT DO NOTHING', [k, v]);
+        }
+      }
+
+      // Seed foods once
+      const fc = await db.get('SELECT COUNT(*) as c FROM foods');
+      if (fc?.c === 0 || fc?.c === '0') {
+        const { seedFoods } = await import('./seedFoods.js');
+        for (const r of seedFoods) {
+          await db.run(
+            'INSERT INTO foods(name,portion,calories,protein_g,carbs_g,fat_g,fiber_g,category) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+            [r.name, r.portion, r.calories, r.protein_g, r.carbs_g, r.fat_g, r.fiber_g, r.category]
+          );
+        }
+        console.log(`[db] seeded ${seedFoods.length} foods`);
+      }
+      console.log('[db] initialization complete');
+      return;
+    } catch (e) {
+      console.error(`[db] init attempt ${i+1}/${retries} failed:`, e.message);
+      if (i < retries - 1) await new Promise(r => setTimeout(r, 3000));
+    }
   }
+  console.error('[db] failed to initialize after retries — starting anyway');
 }
 
-// Seed foods once
-const fc = await db.get('SELECT COUNT(*) as c FROM foods');
-if (fc?.c === 0 || fc?.c === '0') {
-  const { seedFoods } = await import('./seedFoods.js');
-  for (const r of seedFoods) {
-    await db.run(
-      'INSERT INTO foods(name,portion,calories,protein_g,carbs_g,fat_g,fiber_g,category) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
-      [r.name, r.portion, r.calories, r.protein_g, r.carbs_g, r.fat_g, r.fiber_g, r.category]
-    );
-  }
-  console.log(`[db] seeded ${seedFoods.length} foods`);
-}
+initDB();
 
 export const DEFAULT_SETTINGS = { calorie_goal: '2000', protein_goal: '150', carbs_goal: '225', fat_goal: '67', macro_unit: 'g' };
 
