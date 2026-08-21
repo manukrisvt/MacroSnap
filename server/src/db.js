@@ -1,49 +1,96 @@
-import Database from 'better-sqlite3';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { mkdirSync } from 'fs';
-import { seedFoods } from './seedFoods.js';
+// Database abstraction — uses Postgres on Railway (DATABASE_URL set),
+// falls back to SQLite (better-sqlite3) for local dev.
+// Both expose the same async query interface.
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-// Allow override via env (cloud hosts with persistent volumes). Default to local ./data.
-const dataDir = process.env.DATA_DIR
-  ? process.env.DATA_DIR
-  : join(__dirname, '..', 'data');
-mkdirSync(dataDir, { recursive: true });
-const dbPath = join(dataDir, 'macrosnap.db');
+let impl;
 
-export const db = new Database(dbPath);
-db.pragma('journal_mode = WAL');
-db.pragma('foreign_keys = ON');
+if (process.env.DATABASE_URL) {
+  // ---- Postgres (cloud) ----
+  const { Pool } = await import('pg');
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
-db.exec(`
+  impl = {
+    async exec(sql) {
+      const c = await pool.connect();
+      try { await c.query(sql); } finally { c.release(); }
+    },
+    async run(sql, params = []) {
+      const c = await pool.connect();
+      try { return await c.query(sql, params); } finally { c.release(); }
+    },
+    async get(sql, params = []) {
+      const c = await pool.connect();
+      try { const r = await c.query(sql, params); return r.rows[0] || null; } finally { c.release(); }
+    },
+    async all(sql, params = []) {
+      const c = await pool.connect();
+      try { const r = await c.query(sql, params); return r.rows; } finally { c.release(); }
+    },
+    async transaction(fn) {
+      const c = await pool.connect();
+      try {
+        await c.query('BEGIN');
+        const result = await fn({
+          run: (sql, params) => c.query(sql, params),
+          get: async (sql, params) => (await c.query(sql, params)).rows[0] || null,
+          all: async (sql, params) => (await c.query(sql, params)).rows,
+        });
+        await c.query('COMMIT');
+        return result;
+      } catch (e) {
+        await c.query('ROLLBACK');
+        throw e;
+      } finally { c.release(); }
+    }
+  };
+} else {
+  // ---- SQLite (local dev) ----
+  const Database = (await import('better-sqlite3')).default;
+  const { fileURLToPath } = await import('url');
+  const { dirname, join } = await import('path');
+  const { mkdirSync } = await import('fs');
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  const dataDir = process.env.DATA_DIR || join(__dirname, '..', 'data');
+  mkdirSync(dataDir, { recursive: true });
+  const db = new Database(join(dataDir, 'macrosnap.db'));
+  db.pragma('journal_mode = WAL');
+  db.pragma('foreign_keys = ON');
+
+  impl = {
+    exec(sql) { db.exec(sql); },
+    run(sql, params = []) { return db.prepare(sql).run(...params); },
+    get(sql, params = []) { return db.prepare(sql).get(...params); },
+    all(sql, params = []) { return db.prepare(sql).all(...params); },
+    transaction(fn) {
+      const tx = db.transaction(fn);
+      return tx({
+        run: (sql, params) => db.prepare(sql).run(...params),
+        get: (sql, params) => db.prepare(sql).get(...params),
+        all: (sql, params) => db.prepare(sql).all(...params),
+      });
+    }
+  };
+}
+
+export const db = impl;
+
+export const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  id         SERIAL PRIMARY KEY,
   email      TEXT NOT NULL UNIQUE,
   name       TEXT NOT NULL DEFAULT '',
   pass_hash  TEXT NOT NULL,
   is_premium INTEGER NOT NULL DEFAULT 0,
-  created_at INTEGER NOT NULL
+  created_at BIGINT NOT NULL
 );
-
-CREATE TABLE IF NOT EXISTS usage_log (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  user_id    INTEGER NOT NULL,
-  endpoint   TEXT NOT NULL,
-  created_at INTEGER NOT NULL
-);
-
-CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_log(user_id, created_at);
-
 CREATE TABLE IF NOT EXISTS settings (
   user_id  INTEGER NOT NULL DEFAULT 0,
   key      TEXT NOT NULL,
   value    TEXT NOT NULL,
   PRIMARY KEY (user_id, key)
 );
-
 CREATE TABLE IF NOT EXISTS foods (
-  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  id         SERIAL PRIMARY KEY,
   name       TEXT NOT NULL,
   portion    TEXT NOT NULL,
   calories   INTEGER NOT NULL,
@@ -53,18 +100,16 @@ CREATE TABLE IF NOT EXISTS foods (
   fiber_g    REAL NOT NULL DEFAULT 0,
   category   TEXT NOT NULL DEFAULT 'other'
 );
-
 CREATE TABLE IF NOT EXISTS meals (
-  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  id          SERIAL PRIMARY KEY,
   user_id     INTEGER NOT NULL DEFAULT 0,
   date        TEXT NOT NULL,
   meal_type   TEXT NOT NULL,
   photo_thumb TEXT,
-  created_at  INTEGER NOT NULL
+  created_at  BIGINT NOT NULL
 );
-
 CREATE TABLE IF NOT EXISTS meal_items (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  id            SERIAL PRIMARY KEY,
   meal_id       INTEGER NOT NULL REFERENCES meals(id) ON DELETE CASCADE,
   name          TEXT NOT NULL,
   portion       TEXT NOT NULL,
@@ -75,21 +120,18 @@ CREATE TABLE IF NOT EXISTS meal_items (
   fat_g         REAL NOT NULL,
   fiber_g       REAL NOT NULL DEFAULT 0
 );
-
 CREATE TABLE IF NOT EXISTS water (
   user_id  INTEGER NOT NULL DEFAULT 0,
   date     TEXT NOT NULL,
   glasses  INTEGER NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, date)
 );
-
 CREATE TABLE IF NOT EXISTS weight_log (
   user_id    INTEGER NOT NULL DEFAULT 0,
   date       TEXT NOT NULL,
   weight_kg  REAL NOT NULL,
   PRIMARY KEY (user_id, date)
 );
-
 CREATE TABLE IF NOT EXISTS favorites (
   user_id     INTEGER NOT NULL DEFAULT 0,
   name        TEXT NOT NULL,
@@ -101,74 +143,67 @@ CREATE TABLE IF NOT EXISTS favorites (
   fiber_g     REAL NOT NULL DEFAULT 0,
   PRIMARY KEY (user_id, name)
 );
-
-CREATE INDEX IF NOT EXISTS idx_meals_date ON meals(user_id, date);
+CREATE TABLE IF NOT EXISTS usage_log (
+  id         SERIAL PRIMARY KEY,
+  user_id    INTEGER NOT NULL,
+  endpoint   TEXT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_meals_user_date ON meals(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_meal_items_meal ON meal_items(meal_id);
-`);
+CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_log(user_id, created_at);
+`;
 
-// --- Migration: add user_id columns to existing tables (if upgrading from single-user) ---
-const addColumnIfMissing = (table, col, def) => {
-  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(r => r.name);
-  if (!cols.includes(col)) {
-    db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def};`);
-    console.log(`[db] migrated: added ${col} to ${table}`);
+// Initialize schema on startup
+await db.exec(SCHEMA);
+
+// Seed default settings for user 0 (legacy)
+const settingsCount = await db.get('SELECT COUNT(*) as c FROM settings WHERE user_id=0');
+if (settingsCount?.c === 0 || settingsCount?.c === '0') {
+  for (const [k, v] of Object.entries({
+    calorie_goal: '2000', protein_goal: '150', carbs_goal: '225', fat_goal: '67', macro_unit: 'g'
+  })) {
+    await db.run('INSERT INTO settings(user_id,key,value) VALUES(0,?,?) ON CONFLICT DO NOTHING', [k, v]);
   }
-};
-addColumnIfMissing('meals', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
-addColumnIfMissing('settings', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
-addColumnIfMissing('water', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
-addColumnIfMissing('weight_log', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
-addColumnIfMissing('favorites', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
-addColumnIfMissing('users', 'is_premium', 'INTEGER NOT NULL DEFAULT 0');
-
-// Default settings (applied per-user on signup)
-export const DEFAULT_SETTINGS = {
-  calorie_goal: '2000',
-  protein_goal: '150',
-  carbs_goal: '225',
-  fat_goal: '67',
-  macro_unit: 'g'
-};
-
-// Seed default settings for a new user
-export function seedUserSettings(userId) {
-  const ins = db.prepare(
-    'INSERT INTO settings(user_id,key,value) VALUES(?,?,?) ON CONFLICT DO NOTHING'
-  );
-  for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) ins.run(userId, k, v);
 }
 
-// Seed default settings for user 0 (legacy single-user) if none exist
-const settingsCount = db.prepare('SELECT COUNT(*) c FROM settings WHERE user_id=0').get().c;
-if (settingsCount === 0) seedUserSettings(0);
-
-// Seed foods once (shared across all users)
-const foodCount = db.prepare('SELECT COUNT(*) c FROM foods').get().c;
-if (foodCount === 0) {
-  const ins = db.prepare(
-    `INSERT INTO foods(name,portion,calories,protein_g,carbs_g,fat_g,fiber_g,category)
-     VALUES(@name,@portion,@calories,@protein_g,@carbs_g,@fat_g,@fiber_g,@category)`
-  );
-  const tx = db.transaction((rows) => {
-    for (const r of rows) ins.run(r);
-  });
-  tx(seedFoods);
+// Seed foods once
+const foodCount = await db.get('SELECT COUNT(*) as c FROM foods');
+if (foodCount?.c === 0 || foodCount?.c === '0') {
+  const { seedFoods } = await import('./seedFoods.js');
+  for (const r of seedFoods) {
+    await db.run(
+      'INSERT INTO foods(name,portion,calories,protein_g,carbs_g,fat_g,fiber_g,category) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+      [r.name, r.portion, r.calories, r.protein_g, r.carbs_g, r.fat_g, r.fiber_g, r.category]
+    );
+  }
   console.log(`[db] seeded ${seedFoods.length} foods`);
 }
 
-export function getSetting(userId, key, fallback = null) {
-  const row = db.prepare('SELECT value FROM settings WHERE user_id=? AND key=?').get(userId, key);
+export const DEFAULT_SETTINGS = {
+  calorie_goal: '2000', protein_goal: '150', carbs_goal: '225', fat_goal: '67', macro_unit: 'g'
+};
+
+export async function seedUserSettings(userId) {
+  for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {
+    await db.run('INSERT INTO settings(user_id,key,value) VALUES(?,?,?) ON CONFLICT DO NOTHING', [userId, k, v]);
+  }
+}
+
+export async function getSetting(userId, key, fallback = null) {
+  const row = await db.get('SELECT value FROM settings WHERE user_id=$1 AND key=$2', [userId, key]);
   return row ? row.value : fallback;
 }
 
-export function setSetting(userId, key, value) {
-  db.prepare(
-    'INSERT INTO settings(user_id,key,value) VALUES(?,?,?) ON CONFLICT(user_id,key) DO UPDATE SET value=excluded.value'
-  ).run(userId, key, String(value));
+export async function setSetting(userId, key, value) {
+  await db.run(
+    'INSERT INTO settings(user_id,key,value) VALUES($1,$2,$3) ON CONFLICT(user_id,key) DO UPDATE SET value=EXCLUDED.value',
+    [userId, key, String(value)]
+  );
 }
 
-export function getAllSettings(userId) {
-  const rows = db.prepare('SELECT key, value FROM settings WHERE user_id=?').all(userId);
+export async function getAllSettings(userId) {
+  const rows = await db.all('SELECT key, value FROM settings WHERE user_id=$1', [userId]);
   const obj = {};
   for (const r of rows) obj[r.key] = r.value;
   return obj;
