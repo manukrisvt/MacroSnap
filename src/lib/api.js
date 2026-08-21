@@ -3,9 +3,49 @@
 // backend over WiFi via the VITE_API_BASE env var.
 const BASE = (import.meta.env.VITE_API_BASE || '') + '/api';
 
+// Token storage — persists across app launches via Capacitor Preferences on native,
+// localStorage on web.
+let _token = null;
+const TOKEN_KEY = 'macrosnap_token';
+const EMAIL_KEY = 'macrosnap_email';
+
+export function getStoredToken() {
+  if (_token) return _token;
+  try { _token = localStorage.getItem(TOKEN_KEY); } catch { _token = null; }
+  return _token;
+}
+
+export function setAuth(token, email) {
+  _token = token;
+  try {
+    if (token) {
+      localStorage.setItem(TOKEN_KEY, token);
+      if (email) localStorage.setItem(EMAIL_KEY, email);
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(EMAIL_KEY);
+    }
+  } catch {}
+}
+
+export function getStoredEmail() {
+  try { return localStorage.getItem(EMAIL_KEY) || ''; } catch { return ''; }
+}
+
+export function isLoggedIn() {
+  return !!getStoredToken();
+}
+
+export function logout() {
+  setAuth(null, null);
+}
+
 async function req(path, opts = {}) {
+  const token = getStoredToken();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     ...opts
   });
   if (!res.ok) {
@@ -23,6 +63,11 @@ async function req(path, opts = {}) {
 }
 
 export const api = {
+  signup: (email, password, name) =>
+    req('/signup', { method: 'POST', body: JSON.stringify({ email, password, name }) }),
+  login: (email, password) =>
+    req('/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+
   analyze: (image, mimeType) =>
     req('/analyze', { method: 'POST', body: JSON.stringify({ image, mimeType }) }),
 

@@ -4,8 +4,9 @@ import 'dotenv/config';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 import { existsSync } from 'fs';
-import { db, getSetting, setSetting } from './db.js';
+import { db, getSetting, setSetting, getAllSettings } from './db.js';
 import { analyzeMealImage } from './moonshot.js';
+import { signup, login, authMiddleware, requireAuth } from './auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -13,6 +14,33 @@ app.use(cors());
 app.use(express.json({ limit: '12mb' }));
 
 const PORT = process.env.PORT || 8787;
+
+// ---------- auth routes ----------
+app.post('/api/signup', (req, res) => {
+  try {
+    const { email, password, name } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required.' });
+    if (password.length < 4) return res.status(400).json({ error: 'Password must be at least 4 characters.' });
+    const { userId, token } = signup(email, password, name || '');
+    res.json({ userId, token, email });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+app.post('/api/login', (req, res) => {
+  try {
+    const { email, password } = req.body || {};
+    if (!email || !password) return res.status(400).json({ error: 'Email and password required.' });
+    const { userId, token } = login(email, password);
+    res.json({ userId, token, email });
+  } catch (err) {
+    res.status(401).json({ error: err.message });
+  }
+});
+
+// Apply auth middleware to all remaining routes (falls back to user_id=0 if no token)
+app.use(authMiddleware);
 
 // ---------- helpers ----------
 const today = () => new Date().toISOString().slice(0, 10);
@@ -38,7 +66,7 @@ app.post('/api/analyze', async (req, res) => {
   }
 });
 
-// ---------- foods (local DB search) ----------
+// ---------- foods (shared local DB search) ----------
 app.get('/api/foods', (req, res) => {
   const q = (req.query.q || '').trim();
   let rows;
@@ -73,17 +101,17 @@ app.post('/api/foods', (req, res) => {
   res.json({ id: info.lastInsertRowid });
 });
 
-// ---------- meals ----------
+// ---------- meals (per-user) ----------
 app.get('/api/meals', (req, res) => {
   const date = req.query.date || today();
   const meals = db
-    .prepare('SELECT * FROM meals WHERE date=? ORDER BY created_at')
-    .all(date);
+    .prepare('SELECT * FROM meals WHERE user_id=? AND date=? ORDER BY created_at')
+    .all(req.userId, date);
   res.json(meals.map(rowToMealWithItems));
 });
 
 app.get('/api/meals/:id', (req, res) => {
-  const meal = db.prepare('SELECT * FROM meals WHERE id=?').get(req.params.id);
+  const meal = db.prepare('SELECT * FROM meals WHERE id=? AND user_id=?').get(req.params.id, req.userId);
   if (!meal) return res.status(404).json({ error: 'Not found' });
   res.json(rowToMealWithItems(meal));
 });
@@ -95,9 +123,9 @@ app.post('/api/meals', (req, res) => {
   const tx = db.transaction(() => {
     const info = db
       .prepare(
-        `INSERT INTO meals(date,meal_type,photo_thumb,created_at) VALUES(?,?,?,?)`
+        `INSERT INTO meals(user_id,date,meal_type,photo_thumb,created_at) VALUES(?,?,?,?,?)`
       )
-      .run(d, meal_type, photo_thumb || null, Date.now());
+      .run(req.userId, d, meal_type, photo_thumb || null, Date.now());
     const mealId = info.lastInsertRowid;
     const ins = db.prepare(
       `INSERT INTO meal_items(meal_id,name,portion,multiplier,calories,protein_g,carbs_g,fat_g,fiber_g)
@@ -123,16 +151,16 @@ app.post('/api/meals', (req, res) => {
 });
 
 app.delete('/api/meals/:id', (req, res) => {
-  db.prepare('DELETE FROM meals WHERE id=?').run(req.params.id);
+  db.prepare('DELETE FROM meals WHERE id=? AND user_id=?').run(req.params.id, req.userId);
   res.json({ ok: true });
 });
 
-// ---------- day summary ----------
+// ---------- day summary (per-user) ----------
 app.get('/api/day', (req, res) => {
   const date = req.query.date || today();
   const meals = db
-    .prepare('SELECT * FROM meals WHERE date=? ORDER BY created_at')
-    .all(date);
+    .prepare('SELECT * FROM meals WHERE user_id=? AND date=? ORDER BY created_at')
+    .all(req.userId, date);
   let calories = 0, protein = 0, carbs = 0, fat = 0, fiber = 0;
   for (const m of meals) {
     const items = db.prepare('SELECT * FROM meal_items WHERE meal_id=?').all(m.id);
@@ -144,7 +172,7 @@ app.get('/api/day', (req, res) => {
       fiber += it.fiber_g;
     }
   }
-  const water = db.prepare('SELECT glasses FROM water WHERE date=?').get(date);
+  const water = db.prepare('SELECT glasses FROM water WHERE user_id=? AND date=?').get(req.userId, date);
   res.json({
     date,
     totals: { calories, protein_g: protein, carbs_g: carbs, fat_g: fat, fiber_g: fiber },
@@ -153,19 +181,19 @@ app.get('/api/day', (req, res) => {
   });
 });
 
-// ---------- water ----------
+// ---------- water (per-user) ----------
 app.post('/api/water', (req, res) => {
   const date = req.body.date || today();
   const delta = Number(req.body.delta) || 0;
   db.prepare(
-    `INSERT INTO water(date,glasses) VALUES(?,?) ON CONFLICT(date)
+    `INSERT INTO water(user_id,date,glasses) VALUES(?,?,?) ON CONFLICT(user_id,date)
      DO UPDATE SET glasses=MAX(0, water.glasses + ?)`
-  ).run(date, Math.max(0, delta), delta);
-  const row = db.prepare('SELECT glasses FROM water WHERE date=?').get(date);
+  ).run(req.userId, date, Math.max(0, delta), delta);
+  const row = db.prepare('SELECT glasses FROM water WHERE user_id=? AND date=?').get(req.userId, date);
   res.json({ date, glasses: row?.glasses || 0 });
 });
 
-// ---------- history ----------
+// ---------- history (per-user) ----------
 app.get('/api/history', (req, res) => {
   const days = Number(req.query.days) || 30;
   const rows = db
@@ -176,29 +204,30 @@ app.get('/api/history', (req, res) => {
        FROM (
          SELECT m.date, mi.calories AS item_cal, mi.protein_g AS item_pro
          FROM meals m JOIN meal_items mi ON mi.meal_id = m.id
-         WHERE m.date >= date('now', ?)
+         WHERE m.user_id=? AND m.date >= date('now', ?)
        )
        GROUP BY date ORDER BY date`
     )
-    .all(`-${days} days`);
+    .all(req.userId, `-${days} days`);
   res.json(rows.map((r) => ({ ...r, calories: r.calories || 0, protein_g: r.protein_g || 0 })));
 });
 
-// ---------- favorites ----------
+// ---------- favorites (per-user) ----------
 app.get('/api/favorites', (req, res) => {
-  res.json(db.prepare('SELECT * FROM favorites ORDER BY name').all());
+  res.json(db.prepare('SELECT * FROM favorites WHERE user_id=? ORDER BY name').all(req.userId));
 });
 
 app.post('/api/favorites', (req, res) => {
   const f = req.body || {};
   db.prepare(
-    `INSERT INTO favorites(name,portion,calories,protein_g,carbs_g,fat_g,fiber_g)
-     VALUES(@name,@portion,@calories,@protein_g,@carbs_g,@fat_g,@fiber_g)
-     ON CONFLICT(name) DO UPDATE SET
+    `INSERT INTO favorites(user_id,name,portion,calories,protein_g,carbs_g,fat_g,fiber_g)
+     VALUES(@user_id,@name,@portion,@calories,@protein_g,@carbs_g,@fat_g,@fiber_g)
+     ON CONFLICT(user_id,name) DO UPDATE SET
        portion=excluded.portion, calories=excluded.calories,
        protein_g=excluded.protein_g, carbs_g=excluded.carbs_g,
        fat_g=excluded.fat_g, fiber_g=excluded.fiber_g`
   ).run({
+    user_id: req.userId,
     name: f.name, portion: f.portion || '',
     calories: Number(f.calories) || 0,
     protein_g: Number(f.protein_g) || 0,
@@ -210,47 +239,45 @@ app.post('/api/favorites', (req, res) => {
 });
 
 app.delete('/api/favorites/:name', (req, res) => {
-  db.prepare('DELETE FROM favorites WHERE name=?').run(req.params.name);
+  db.prepare('DELETE FROM favorites WHERE user_id=? AND name=?').run(req.userId, req.params.name);
   res.json({ ok: true });
 });
 
-// ---------- settings ----------
+// ---------- settings (per-user) ----------
 app.get('/api/settings', (req, res) => {
-  const rows = db.prepare('SELECT key, value FROM settings').all();
-  const obj = {};
-  for (const r of rows) obj[r.key] = r.value;
-  res.json(obj);
+  res.json(getAllSettings(req.userId));
 });
 
 app.post('/api/settings', (req, res) => {
-  for (const [k, v] of Object.entries(req.body || {})) setSetting(k, v);
+  for (const [k, v] of Object.entries(req.body || {})) setSetting(req.userId, k, v);
   res.json({ ok: true });
 });
 
-// ---------- weight log ----------
+// ---------- weight log (per-user) ----------
 app.get('/api/weight', (req, res) => {
-  res.json(db.prepare('SELECT * FROM weight_log ORDER BY date').all());
+  res.json(db.prepare('SELECT * FROM weight_log WHERE user_id=? ORDER BY date').all(req.userId));
 });
 
 app.post('/api/weight', (req, res) => {
   const { date, weight_kg } = req.body || {};
   const d = date || today();
   db.prepare(
-    `INSERT INTO weight_log(date,weight_kg) VALUES(?,?) ON CONFLICT(date)
+    `INSERT INTO weight_log(user_id,date,weight_kg) VALUES(?,?,?) ON CONFLICT(user_id,date)
      DO UPDATE SET weight_kg=excluded.weight_kg`
-  ).run(d, Number(weight_kg));
+  ).run(req.userId, d, Number(weight_kg));
   res.json({ ok: true });
 });
 
-// ---------- recent foods ----------
+// ---------- recent foods (per-user) ----------
 app.get('/api/recent', (req, res) => {
   const limit = Number(req.query.limit) || 20;
   const rows = db
     .prepare(
-      `SELECT DISTINCT name, portion, calories, protein_g, carbs_g, fat_g, fiber_g
-       FROM meal_items ORDER BY id DESC LIMIT ?`
+      `SELECT DISTINCT mi.name, mi.portion, mi.calories, mi.protein_g, mi.carbs_g, mi.fat_g, mi.fiber_g
+       FROM meal_items mi JOIN meals m ON mi.meal_id = m.id
+       WHERE m.user_id=? ORDER BY mi.id DESC LIMIT ?`
     )
-    .all(limit);
+    .all(req.userId, limit);
   res.json(rows);
 });
 

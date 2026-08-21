@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { api } from '../lib/api.js';
+import { api, logout, getStoredEmail } from '../lib/api.js';
 import { todayStr, formatDate } from '../lib/image.js';
 import { getAISettings, saveAISettings, PROVIDERS } from '../lib/aiSettings.js';
 import Header from '../components/Header.jsx';
@@ -99,6 +99,11 @@ export default function Settings() {
       </section>
 
       <p className="mt-6 text-center text-[11px] text-slate-400">MacroSnap v1.0 · single-user, local SQLite</p>
+
+      <button
+        onClick={() => { if (confirm('Log out?')) { logout(); window.location.reload(); } }}
+        className="mt-3 w-full rounded-xl border border-rose-200 bg-rose-50 py-3 text-sm font-semibold text-rose-600 active:scale-[.98]"
+      >Log out{getStoredEmail() ? ` (${getStoredEmail()})` : ''}</button>
     </div>
   );
 }

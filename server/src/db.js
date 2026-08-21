@@ -17,9 +17,19 @@ db.pragma('journal_mode = WAL');
 db.pragma('foreign_keys = ON');
 
 db.exec(`
+CREATE TABLE IF NOT EXISTS users (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  email      TEXT NOT NULL UNIQUE,
+  name       TEXT NOT NULL DEFAULT '',
+  pass_hash  TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS settings (
-  key   TEXT PRIMARY KEY,
-  value TEXT NOT NULL
+  user_id  INTEGER NOT NULL DEFAULT 0,
+  key      TEXT NOT NULL,
+  value    TEXT NOT NULL,
+  PRIMARY KEY (user_id, key)
 );
 
 CREATE TABLE IF NOT EXISTS foods (
@@ -36,9 +46,10 @@ CREATE TABLE IF NOT EXISTS foods (
 
 CREATE TABLE IF NOT EXISTS meals (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
-  date        TEXT NOT NULL,            -- YYYY-MM-DD
-  meal_type   TEXT NOT NULL,            -- breakfast|lunch|dinner|snacks
-  photo_thumb TEXT,                     -- base64 thumbnail
+  user_id     INTEGER NOT NULL DEFAULT 0,
+  date        TEXT NOT NULL,
+  meal_type   TEXT NOT NULL,
+  photo_thumb TEXT,
   created_at  INTEGER NOT NULL
 );
 
@@ -56,43 +67,71 @@ CREATE TABLE IF NOT EXISTS meal_items (
 );
 
 CREATE TABLE IF NOT EXISTS water (
-  date  TEXT PRIMARY KEY,
-  glasses INTEGER NOT NULL DEFAULT 0
+  user_id  INTEGER NOT NULL DEFAULT 0,
+  date     TEXT NOT NULL,
+  glasses  INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, date)
 );
 
 CREATE TABLE IF NOT EXISTS weight_log (
-  date  TEXT PRIMARY KEY,
-  weight_kg REAL NOT NULL
+  user_id    INTEGER NOT NULL DEFAULT 0,
+  date       TEXT NOT NULL,
+  weight_kg  REAL NOT NULL,
+  PRIMARY KEY (user_id, date)
 );
 
 CREATE TABLE IF NOT EXISTS favorites (
-  name        TEXT PRIMARY KEY,
+  user_id     INTEGER NOT NULL DEFAULT 0,
+  name        TEXT NOT NULL,
   portion     TEXT NOT NULL,
   calories    INTEGER NOT NULL,
   protein_g   REAL NOT NULL,
   carbs_g     REAL NOT NULL,
   fat_g       REAL NOT NULL,
-  fiber_g     REAL NOT NULL DEFAULT 0
+  fiber_g     REAL NOT NULL DEFAULT 0,
+  PRIMARY KEY (user_id, name)
 );
 
-CREATE INDEX IF NOT EXISTS idx_meals_date ON meals(date);
+CREATE INDEX IF NOT EXISTS idx_meals_date ON meals(user_id, date);
 CREATE INDEX IF NOT EXISTS idx_meal_items_meal ON meal_items(meal_id);
 `);
 
-// Default settings
-const defaults = {
+// --- Migration: add user_id columns to existing tables (if upgrading from single-user) ---
+const addColumnIfMissing = (table, col, def) => {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all().map(r => r.name);
+  if (!cols.includes(col)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${col} ${def};`);
+    console.log(`[db] migrated: added ${col} to ${table}`);
+  }
+};
+addColumnIfMissing('meals', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
+addColumnIfMissing('settings', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
+addColumnIfMissing('water', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
+addColumnIfMissing('weight_log', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
+addColumnIfMissing('favorites', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
+
+// Default settings (applied per-user on signup)
+export const DEFAULT_SETTINGS = {
   calorie_goal: '2000',
   protein_goal: '150',
   carbs_goal: '225',
   fat_goal: '67',
-  macro_unit: 'g' // 'g' or 'percent'
+  macro_unit: 'g'
 };
-const upsertSetting = db.prepare(
-  'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO NOTHING'
-);
-for (const [k, v] of Object.entries(defaults)) upsertSetting.run(k, v);
 
-// Seed foods once
+// Seed default settings for a new user
+export function seedUserSettings(userId) {
+  const ins = db.prepare(
+    'INSERT INTO settings(user_id,key,value) VALUES(?,?,?) ON CONFLICT DO NOTHING'
+  );
+  for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) ins.run(userId, k, v);
+}
+
+// Seed default settings for user 0 (legacy single-user) if none exist
+const settingsCount = db.prepare('SELECT COUNT(*) c FROM settings WHERE user_id=0').get().c;
+if (settingsCount === 0) seedUserSettings(0);
+
+// Seed foods once (shared across all users)
 const foodCount = db.prepare('SELECT COUNT(*) c FROM foods').get().c;
 if (foodCount === 0) {
   const ins = db.prepare(
@@ -106,13 +145,20 @@ if (foodCount === 0) {
   console.log(`[db] seeded ${seedFoods.length} foods`);
 }
 
-export function getSetting(key, fallback = null) {
-  const row = db.prepare('SELECT value FROM settings WHERE key=?').get(key);
+export function getSetting(userId, key, fallback = null) {
+  const row = db.prepare('SELECT value FROM settings WHERE user_id=? AND key=?').get(userId, key);
   return row ? row.value : fallback;
 }
 
-export function setSetting(key, value) {
+export function setSetting(userId, key, value) {
   db.prepare(
-    'INSERT INTO settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value'
-  ).run(key, String(value));
+    'INSERT INTO settings(user_id,key,value) VALUES(?,?,?) ON CONFLICT(user_id,key) DO UPDATE SET value=excluded.value'
+  ).run(userId, key, String(value));
+}
+
+export function getAllSettings(userId) {
+  const rows = db.prepare('SELECT key, value FROM settings WHERE user_id=?').all(userId);
+  const obj = {};
+  for (const r of rows) obj[r.key] = r.value;
+  return obj;
 }

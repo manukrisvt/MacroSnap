@@ -8,7 +8,7 @@ const navItems = [
   { to: '/settings', label: 'Settings', icon: SettingsIcon }
 ];
 
-export default function App() {
+export default function App({ onLogout }) {
   const loc = useLocation();
   return (
     <div className="mx-auto flex h-full max-w-md flex-col bg-slate-50">
