@@ -67,6 +67,7 @@ export const api = {
     req('/signup', { method: 'POST', body: JSON.stringify({ email, password, name }) }),
   login: (email, password) =>
     req('/login', { method: 'POST', body: JSON.stringify({ email, password }) }),
+  usage: () => req('/usage'),
 
   analyze: (image, mimeType) =>
     req('/analyze', { method: 'POST', body: JSON.stringify({ image, mimeType }) }),

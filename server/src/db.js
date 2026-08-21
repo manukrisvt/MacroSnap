@@ -22,8 +22,18 @@ CREATE TABLE IF NOT EXISTS users (
   email      TEXT NOT NULL UNIQUE,
   name       TEXT NOT NULL DEFAULT '',
   pass_hash  TEXT NOT NULL,
+  is_premium INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS usage_log (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  user_id    INTEGER NOT NULL,
+  endpoint   TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_usage_user ON usage_log(user_id, created_at);
 
 CREATE TABLE IF NOT EXISTS settings (
   user_id  INTEGER NOT NULL DEFAULT 0,
@@ -109,6 +119,7 @@ addColumnIfMissing('settings', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
 addColumnIfMissing('water', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
 addColumnIfMissing('weight_log', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
 addColumnIfMissing('favorites', 'user_id', 'INTEGER NOT NULL DEFAULT 0');
+addColumnIfMissing('users', 'is_premium', 'INTEGER NOT NULL DEFAULT 0');
 
 // Default settings (applied per-user on signup)
 export const DEFAULT_SETTINGS = {

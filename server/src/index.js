@@ -6,7 +6,7 @@ import { dirname, join, resolve } from 'path';
 import { existsSync } from 'fs';
 import { db, getSetting, setSetting, getAllSettings } from './db.js';
 import { analyzeMealImage } from './moonshot.js';
-import { signup, login, authMiddleware, requireAuth } from './auth.js';
+import { signup, login, authMiddleware, requireAuth, checkQuota, logSnap, isPremium, setPremium } from './auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -52,18 +52,36 @@ function rowToMealWithItems(meal) {
   return { ...meal, items };
 }
 
-// ---------- photo analysis ----------
+// ---------- photo analysis (server key — quota limited) ----------
 app.post('/api/analyze', async (req, res) => {
   try {
     const { image, mimeType } = req.body || {};
     if (!image) return res.status(400).json({ error: 'No image provided.' });
+
+    // Quota check — only applies to server-key mode (BYO key calls go direct, no quota)
+    const quota = checkQuota(req.userId);
+    if (!quota.allowed) {
+      return res.status(402).json({
+        error: 'You have used all 3 free photo analyses.',
+        code: 'QUOTA_EXCEEDED',
+        quota,
+        upgrade: true
+      });
+    }
+
     const result = await analyzeMealImage(image, mimeType);
-    res.json(result);
+    logSnap(req.userId); // count this analysis
+    res.json({ ...result, quota: checkQuota(req.userId) });
   } catch (err) {
     console.error('[analyze] error:', err.message);
     const fallback = { error: err.message, code: err.code, fallback: true };
     res.status(502).json(fallback);
   }
+});
+
+// ---------- usage / quota ----------
+app.get('/api/usage', (req, res) => {
+  res.json(checkQuota(req.userId));
 });
 
 // ---------- foods (shared local DB search) ----------

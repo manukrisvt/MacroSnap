@@ -1,6 +1,9 @@
 import crypto from 'crypto';
 import { db, seedUserSettings } from './db.js';
 
+// Free tier: 3 server-side photo analyses. BYO-key users are unlimited (calls go direct).
+export const FREE_SNAP_LIMIT = 3;
+
 // Simple password hashing using Node's built-in scrypt (no external deps).
 const SALT_LEN = 16;
 const KEY_LEN = 32;
@@ -90,4 +93,43 @@ export function requireAuth(req, res, next) {
   }
   req.userId = userId;
   next();
+}
+
+// Check if user is premium
+export function isPremium(userId) {
+  const row = db.prepare('SELECT is_premium FROM users WHERE id=?').get(userId);
+  return row?.is_premium === 1;
+}
+
+// Count server-side analyze calls for a user
+export function getSnapCount(userId) {
+  const row = db.prepare(
+    `SELECT COUNT(*) as c FROM usage_log WHERE user_id=? AND endpoint='analyze'`
+  ).get(userId);
+  return row?.c || 0;
+}
+
+// Log a server-side analyze call
+export function logSnap(userId) {
+  db.prepare('INSERT INTO usage_log(user_id, endpoint, created_at) VALUES(?,?,?)')
+    .run(userId, 'analyze', Date.now());
+}
+
+// Check quota — returns { allowed, used, limit, isPremium }
+export function checkQuota(userId) {
+  const premium = isPremium(userId);
+  const used = getSnapCount(userId);
+  const limit = FREE_SNAP_LIMIT;
+  return {
+    allowed: premium || used < limit,
+    used,
+    limit,
+    remaining: Math.max(0, limit - used),
+    isPremium: premium
+  };
+}
+
+// Set premium status (for manual granting or after payment)
+export function setPremium(userId, premium) {
+  db.prepare('UPDATE users SET is_premium=? WHERE id=?').run(premium ? 1 : 0, userId);
 }

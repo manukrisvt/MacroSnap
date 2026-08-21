@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { api } from '../lib/api.js';
@@ -23,6 +23,8 @@ export default function Analyze() {
   const [result, setResult] = useState(null); // { foods, total_calories, confidence }
   const [mealType, setMealType] = useState(guessMealType());
   const [logging, setLogging] = useState(false);
+  const [quotaInfo, setQuotaInfo] = useState(null);
+  const [quotaExceeded, setQuotaExceeded] = useState(null);
 
   async function handleDataUrl(dataUrl) {
     const b64 = dataUrl.split(',')[1];
@@ -77,22 +79,34 @@ export default function Analyze() {
   async function analyze(b64) {
     setLoading(true);
     setError(null);
+    setQuotaExceeded(null);
     try {
       const aiSettings = await getAISettings();
       let r;
       if (aiSettings.aiMode === 'byo' && aiSettings.byoApiKey) {
-        // BYO key — call AI directly from device, key never touches server
+        // BYO key — call AI directly from device, key never touches server, no quota
         const dataUrl = `data:image/jpeg;base64,${b64}`;
         r = await analyzeMealImageDirect(dataUrl, aiSettings);
       } else {
-        // Server mode — use cloud backend's API key
+        // Server mode — use cloud backend's API key (quota limited)
         r = await api.analyze(b64, 'image/jpeg');
       }
       const foods = (r.foods || []).map((f) => ({ ...f, multiplier: 1 }));
       setResult({ foods, total_calories: r.total_calories, confidence: r.confidence });
+      if (r.quota) setQuotaInfo(r.quota);
       if (foods.length === 0) setError('No foods detected. Enter manually instead.');
     } catch (e) {
-      setError(e.message || "Couldn't analyze the photo. Enter manually instead.");
+      if (e.status === 402) {
+        // Quota exceeded — show paywall
+        try {
+          const q = await api.usage();
+          setQuotaExceeded(q);
+        } catch {
+          setQuotaExceeded({ used: 3, limit: 3, remaining: 0, isPremium: false });
+        }
+      } else {
+        setError(e.message || "Couldn't analyze the photo. Enter manually instead.");
+      }
     } finally {
       setLoading(false);
     }
@@ -208,14 +222,47 @@ export default function Analyze() {
         </div>
       )}
 
-      {error && !loading && (
+      {error && !loading && !quotaExceeded && (
         <div className="mt-4 rounded-2xl bg-amber-50 p-4 text-sm text-amber-800">
-          <p className="font-semibold">Couldn’t analyze</p>
+          <p className="font-semibold">Couldn't analyze</p>
           <p className="mt-1">{error}</p>
           <button
             onClick={() => navigate('/manual')}
             className="mt-3 rounded-lg bg-amber-600 px-4 py-2 font-medium text-white"
           >Enter manually →</button>
+        </div>
+      )}
+
+      {/* Quota paywall */}
+      {quotaExceeded && !loading && (
+        <div className="mt-4 rounded-2xl bg-slate-900 p-6 text-center text-white">
+          <div className="text-4xl">🔒</div>
+          <p className="mt-2 text-lg font-bold">Free snaps used up</p>
+          <p className="mt-1 text-sm text-slate-400">
+            You've used all {quotaExceeded.limit} free photo analyses.
+          </p>
+          <div className="mt-4 space-y-2">
+            <Link to="/settings"
+              className="block rounded-xl bg-brand-500 py-3 font-semibold text-white active:scale-[.98]">
+              🔑 Bring your own API key (Free)
+            </Link>
+            <p className="text-xs text-slate-500">
+              Add your own OpenRouter/OpenAI key in Settings to get unlimited snaps for free.
+              No subscription needed.
+            </p>
+          </div>
+          <button
+            onClick={() => navigate('/manual')}
+            className="mt-3 w-full rounded-xl border border-slate-700 py-3 text-sm font-medium text-slate-300"
+          >Add food manually →</button>
+        </div>
+      )}
+
+      {/* Quota counter (when still has free snaps) */}
+      {quotaInfo && !quotaInfo.isPremium && quotaInfo.remaining > 0 && !quotaExceeded && !loading && (
+        <div className="mt-2 flex items-center justify-between rounded-xl bg-slate-100 px-4 py-2 text-xs text-slate-500">
+          <span>📸 Free snaps used: {quotaInfo.used}/{quotaInfo.limit}</span>
+          <Link to="/settings" className="font-medium text-brand-600">Go unlimited →</Link>
         </div>
       )}
 
