@@ -84,6 +84,50 @@ app.get('/api/usage', (req, res) => {
   res.json(checkQuota(req.userId));
 });
 
+// ---------- user profile (tier, name, email) ----------
+app.get('/api/me', (req, res) => {
+  const user = db.prepare('SELECT id, email, name, is_premium FROM users WHERE id=?').get(req.userId);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  const quota = checkQuota(req.userId);
+  res.json({
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    isPremium: user.is_premium === 1,
+    tier: user.is_premium === 1 ? 'premium' : 'free',
+    quota
+  });
+});
+
+// ---------- barcode lookup (Open Food Facts — free, no key) ----------
+app.get('/api/barcode/:code', async (req, res) => {
+  try {
+    const code = req.params.code;
+    const r = await fetch(`https://world.openfoodfacts.org/api/v2/product/${code}.json`);
+    const data = await r.json();
+    if (data.status !== 1 || !data.product) {
+      return res.status(404).json({ error: 'Product not found' });
+    }
+    const p = data.product;
+    const n = p.nutriments || {};
+    res.json({
+      name: p.product_name || 'Unknown product',
+      brand: p.brands || '',
+      portion: p.serving_size || '100g',
+      calories: Math.round(Number(n['energy-kcal_serving']) || Number(n['energy-kcal_100g']) || 0),
+      protein_g: Math.round(Number(n.proteins_serving || n.proteins_100g) * 10) / 10 || 0,
+      carbs_g: Math.round(Number(n.carbohydrates_serving || n.carbohydrates_100g) * 10) / 10 || 0,
+      fat_g: Math.round(Number(n.fat_serving || n.fat_100g) * 10) / 10 || 0,
+      fiber_g: Math.round(Number(n.fiber_serving || n.fiber_100g) * 10) / 10 || 0,
+      sugar_g: Math.round(Number(n.sugars_serving || n.sugars_100g) * 10) / 10 || 0,
+      sodium_mg: Math.round(Number(n.sodium_serving || n.sodium_100g) * 1000) || 0,
+      image_url: p.image_front_url || p.image_url || null
+    });
+  } catch (err) {
+    res.status(502).json({ error: 'Barcode lookup failed' });
+  }
+});
+
 // ---------- foods (shared local DB search) ----------
 app.get('/api/foods', (req, res) => {
   const q = (req.query.q || '').trim();

@@ -13,6 +13,9 @@ export default function ManualAdd() {
   const [custom, setCustom] = useState({ name: '', portion: '1 serving', calories: '', protein_g: '', carbs_g: '', fat_g: '', fiber_g: '' });
   const [showCustom, setShowCustom] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [barcode, setBarcode] = useState('');
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
+  const [barcodeError, setBarcodeError] = useState(null);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -20,6 +23,21 @@ export default function ManualAdd() {
     }, 200);
     return () => clearTimeout(t);
   }, [query]);
+
+  async function lookupBarcode() {
+    if (!barcode.trim()) return;
+    setBarcodeLoading(true);
+    setBarcodeError(null);
+    try {
+      const f = await api.barcode(barcode.trim());
+      addFood({ ...f, source: 'barcode' });
+      setBarcode('');
+    } catch (e) {
+      setBarcodeError(e.message || 'Product not found');
+    } finally {
+      setBarcodeLoading(false);
+    }
+  }
 
   function addFood(f) {
     setSelected((p) => [...p, { ...f, multiplier: 1, source: 'db' }]);
@@ -84,6 +102,24 @@ export default function ManualAdd() {
         placeholder="Search foods (e.g. dal, idli, chicken)…"
         className="mt-3 w-full rounded-xl border border-slate-200 px-4 py-3 text-base"
       />
+
+      {/* Barcode lookup */}
+      <div className="mt-2 flex gap-2">
+        <input
+          value={barcode}
+          onChange={(e) => setBarcode(e.target.value)}
+          placeholder="📦 Scan barcode (enter digits)"
+          inputMode="numeric"
+          className="flex-1 rounded-xl border border-slate-200 px-4 py-3 text-sm"
+          onKeyDown={(e) => e.key === 'Enter' && lookupBarcode()}
+        />
+        <button
+          onClick={lookupBarcode}
+          disabled={barcodeLoading}
+          className="rounded-xl bg-slate-900 px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
+        >{barcodeLoading ? '…' : 'Lookup'}</button>
+      </div>
+      {barcodeError && <p className="mt-1 text-xs text-rose-500">{barcodeError}</p>}
 
       <div className="mt-2 max-h-64 space-y-1 overflow-y-auto rounded-xl bg-white p-1 shadow-sm">
         {results.map((f) => (

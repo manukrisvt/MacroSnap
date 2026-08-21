@@ -11,11 +11,13 @@ export default function Settings() {
   const [saved, setSaved] = useState(false);
   const [ai, setAI] = useState(null);
   const [aiSaved, setAISaved] = useState(false);
+  const [profile, setProfile] = useState(null);
 
   useEffect(() => {
     api.settings().then(setS);
     api.weight().then(setWeightLog);
     getAISettings().then(setAI);
+    api.me().then(setProfile).catch(() => {});
   }, []);
 
   function update(k, v) { setS((p) => ({ ...p, [k]: v })); }
@@ -38,6 +40,39 @@ export default function Settings() {
   return (
     <div className="px-4">
       <Header title="Settings" subtitle="Goals & profile" />
+
+      {/* Account + tier badge */}
+      {profile && (
+        <div className="mt-3 flex items-center justify-between rounded-2xl bg-white p-4 shadow-sm">
+          <div>
+            <p className="text-sm font-semibold text-slate-800">{profile.name || profile.email}</p>
+            <p className="text-xs text-slate-400">{profile.email}</p>
+          </div>
+          <span className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+            profile.isPremium
+              ? 'bg-gradient-to-r from-amber-400 to-orange-500 text-white'
+              : 'bg-slate-100 text-slate-500'
+          }`}>
+            {profile.isPremium ? '⭐ PREMIUM' : 'FREE TIER'}
+          </span>
+        </div>
+      )}
+
+      {/* Quota display for free users */}
+      {profile && !profile.isPremium && (
+        <div className="mt-2 rounded-xl bg-slate-100 px-4 py-3 text-xs text-slate-500">
+          <div className="flex items-center justify-between">
+            <span>📸 Server snaps: {profile.quota.used}/{profile.quota.limit} used</span>
+            <span className="font-medium text-brand-600">{profile.quota.remaining} left</span>
+          </div>
+          <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-200">
+            <div className="h-full rounded-full bg-brand-500" style={{ width: `${(profile.quota.used / profile.quota.limit) * 100}%` }} />
+          </div>
+          <p className="mt-2 text-[11px] text-slate-400">
+            Add your own API key (above) for unlimited free snaps, or upgrade to Premium.
+          </p>
+        </div>
+      )}
 
       {/* AI Provider — BYO key vs server key */}
       {ai && (
