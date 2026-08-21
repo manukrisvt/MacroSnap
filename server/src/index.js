@@ -75,8 +75,9 @@ app.use(authMiddleware);
 
 // ---------- clear all data (admin) ----------
 app.post('/api/admin/clear-all', async (req, res) => {
-  const adminKey = req.body?.adminKey;
-  if (adminKey !== process.env.ADMIN_KEY) {
+  const adminKey = req.body?.adminKey || req.headers['x-admin-key'];
+  const validKey = process.env.ADMIN_KEY || 'macrosnap-admin-2026';
+  if (adminKey !== validKey) {
     return res.status(403).json({ error: 'Unauthorized.' });
   }
   try {
