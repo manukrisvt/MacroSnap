@@ -4,6 +4,8 @@ import { Capacitor } from '@capacitor/core';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { api } from '../lib/api.js';
 import { compressImage, makeThumbnail, MEAL_TYPES, guessMealType, todayStr } from '../lib/image.js';
+import { getAISettings } from '../lib/aiSettings.js';
+import { analyzeMealImageDirect } from '../lib/clientAI.js';
 import Header from '../components/Header.jsx';
 
 const MULTIPLIERS = [0.5, 1, 1.5, 2];
@@ -76,13 +78,21 @@ export default function Analyze() {
     setLoading(true);
     setError(null);
     try {
-      const r = await api.analyze(b64, 'image/jpeg');
-      // attach a multiplier per food for the slider
+      const aiSettings = await getAISettings();
+      let r;
+      if (aiSettings.aiMode === 'byo' && aiSettings.byoApiKey) {
+        // BYO key — call AI directly from device, key never touches server
+        const dataUrl = `data:image/jpeg;base64,${b64}`;
+        r = await analyzeMealImageDirect(dataUrl, aiSettings);
+      } else {
+        // Server mode — use cloud backend's API key
+        r = await api.analyze(b64, 'image/jpeg');
+      }
       const foods = (r.foods || []).map((f) => ({ ...f, multiplier: 1 }));
       setResult({ foods, total_calories: r.total_calories, confidence: r.confidence });
       if (foods.length === 0) setError('No foods detected. Enter manually instead.');
     } catch (e) {
-      setError(e.message || 'Couldn’t analyze the photo. Enter manually instead.');
+      setError(e.message || "Couldn't analyze the photo. Enter manually instead.");
     } finally {
       setLoading(false);
     }

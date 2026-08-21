@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api.js';
 import { todayStr, formatDate } from '../lib/image.js';
+import { getAISettings, saveAISettings, PROVIDERS } from '../lib/aiSettings.js';
 import Header from '../components/Header.jsx';
 
 export default function Settings() {
@@ -8,10 +9,13 @@ export default function Settings() {
   const [weight, setWeight] = useState('');
   const [weightLog, setWeightLog] = useState([]);
   const [saved, setSaved] = useState(false);
+  const [ai, setAI] = useState(null);
+  const [aiSaved, setAISaved] = useState(false);
 
   useEffect(() => {
     api.settings().then(setS);
     api.weight().then(setWeightLog);
+    getAISettings().then(setAI);
   }, []);
 
   function update(k, v) { setS((p) => ({ ...p, [k]: v })); }
@@ -34,6 +38,11 @@ export default function Settings() {
   return (
     <div className="px-4">
       <Header title="Settings" subtitle="Goals & profile" />
+
+      {/* AI Provider — BYO key vs server key */}
+      {ai && (
+        <AIProviderSection ai={ai} setAI={setAI} saved={aiSaved} setSaved={setAISaved} />
+      )}
 
       <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-700">Daily calorie goal</h2>
@@ -91,6 +100,145 @@ export default function Settings() {
 
       <p className="mt-6 text-center text-[11px] text-slate-400">MacroSnap v1.0 · single-user, local SQLite</p>
     </div>
+  );
+}
+
+function AIProviderSection({ ai, setAI, saved, setSaved }) {
+  const provider = PROVIDERS.find((p) => p.id === ai.byoProvider) || PROVIDERS[0];
+
+  function update(field, value) {
+    setAI((p) => ({ ...p, [field]: value }));
+  }
+
+  function selectProvider(id) {
+    const p = PROVIDERS.find((x) => x.id === id);
+    setAI((prev) => ({
+      ...prev,
+      byoProvider: id,
+      byoBaseUrl: p.baseUrl || prev.byoBaseUrl
+    }));
+  }
+
+  async function save() {
+    await saveAISettings(ai);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 1500);
+  }
+
+  return (
+    <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
+      <div className="flex items-center gap-2">
+        <span className="text-base">🤖</span>
+        <h2 className="text-sm font-semibold text-slate-700">AI Provider</h2>
+      </div>
+
+      {/* Mode toggle */}
+      <div className="mt-3 flex gap-1 rounded-xl bg-slate-100 p-1">
+        <button
+          onClick={() => update('aiMode', 'server')}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${
+            ai.aiMode === 'server' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'
+          }`}
+        >☁️ Use MacroSnap Cloud (Premium)</button>
+        <button
+          onClick={() => update('aiMode', 'byo')}
+          className={`flex-1 rounded-lg py-2 text-xs font-semibold ${
+            ai.aiMode === 'byo' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500'
+          }`}
+        >🔑 Bring Your Own Key (Free)</button>
+      </div>
+
+      {ai.aiMode === 'server' ? (
+        <p className="mt-3 text-xs text-slate-500">
+          Photo analysis runs through MacroSnap's cloud server. Uses our API key —
+          a subscription may be required for heavy use. Works out of the box, no setup needed.
+        </p>
+      ) : (
+        <div className="mt-3 space-y-3">
+          <p className="text-xs text-slate-500">
+            Use your own AI API key — calls go directly from your device to the provider.
+            <strong className="text-slate-700"> Free, unlimited.</strong> Your key is stored
+            only on this device and never sent to our server.
+          </p>
+
+          {/* Provider dropdown */}
+          <div>
+            <label className="text-xs font-medium text-slate-600">Provider</label>
+            <select
+              value={ai.byoProvider}
+              onChange={(e) => selectProvider(e.target.value)}
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+            >
+              {PROVIDERS.map((p) => (
+                <option key={p.id} value={p.id}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* API key */}
+          <div>
+            <label className="text-xs font-medium text-slate-600">API Key</label>
+            <input
+              type="password"
+              value={ai.byoApiKey || ''}
+              onChange={(e) => update('byoApiKey', e.target.value)}
+              placeholder="sk-..."
+              className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono"
+            />
+            {provider.helpUrl && (
+              <a href={provider.helpUrl} target="_blank" rel="noopener noreferrer"
+                className="mt-1 block text-[11px] text-brand-600">
+                Get a key →
+              </a>
+            )}
+          </div>
+
+          {/* Model selection */}
+          {provider.models.length > 0 ? (
+            <div>
+              <label className="text-xs font-medium text-slate-600">Model</label>
+              <select
+                value={ai.byoModel}
+                onChange={(e) => update('byoModel', e.target.value)}
+                className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm"
+              >
+                {provider.models.map((m) => (
+                  <option key={m.id} value={m.id}>{m.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="text-xs font-medium text-slate-600">Base URL</label>
+                <input
+                  type="text"
+                  value={ai.byoBaseUrl || ''}
+                  onChange={(e) => update('byoBaseUrl', e.target.value)}
+                  placeholder="https://api.example.com/v1"
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-slate-600">Model ID</label>
+                <input
+                  type="text"
+                  value={ai.byoModel || ''}
+                  onChange={(e) => update('byoModel', e.target.value)}
+                  placeholder="model-name"
+                  className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm font-mono"
+                />
+              </div>
+            </>
+          )}
+
+          <button
+            onClick={save}
+            className="w-full rounded-xl bg-brand-500 py-3 text-sm font-semibold text-white active:scale-[.98]"
+          >{saved ? 'Saved ✓' : 'Save AI Settings'}</button>
+        </div>
+      )}
+    </section>
   );
 }
 
