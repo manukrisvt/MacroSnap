@@ -290,9 +290,9 @@ app.get('/api/history', async (req, res) => {
   const rows = await db.all(
     `SELECT m.date, SUM(mi.calories) AS calories, SUM(mi.protein_g) AS protein_g
      FROM meals m JOIN meal_items mi ON mi.meal_id = m.id
-     WHERE m.user_id=$1 AND m.date >= date('now', $2)
+     WHERE m.user_id=$1 AND m.date >= (CURRENT_DATE - $2::interval)
      GROUP BY m.date ORDER BY m.date`,
-    [req.userId, `-${days} days`]
+    [req.userId, `${days} days`]
   );
   res.json(rows.map(r => ({ ...r, calories: r.calories||0, protein_g: r.protein_g||0 })));
 });
