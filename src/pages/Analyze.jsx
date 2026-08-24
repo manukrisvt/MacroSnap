@@ -6,6 +6,7 @@ import { api } from '../lib/api.js';
 import { compressImage, makeThumbnail, MEAL_TYPES, guessMealType, todayStr } from '../lib/image.js';
 import { getAISettings } from '../lib/aiSettings.js';
 import { analyzeMealImageDirect } from '../lib/clientAI.js';
+import { getRandomFunnyMessage } from '../lib/funnyMessages.js';
 import Header from '../components/Header.jsx';
 
 const MULTIPLIERS = [0.5, 1, 1.5, 2];
@@ -25,6 +26,7 @@ export default function Analyze() {
   const [logging, setLogging] = useState(false);
   const [quotaInfo, setQuotaInfo] = useState(null);
   const [quotaExceeded, setQuotaExceeded] = useState(null);
+  const [funnyMsg, setFunnyMsg] = useState('');
 
   async function handleDataUrl(dataUrl) {
     const b64 = dataUrl.split(',')[1];
@@ -80,6 +82,7 @@ export default function Analyze() {
     setLoading(true);
     setError(null);
     setQuotaExceeded(null);
+    setFunnyMsg(getRandomFunnyMessage());
     try {
       const aiSettings = await getAISettings();
       let r;
@@ -105,7 +108,24 @@ export default function Analyze() {
           setQuotaExceeded({ used: 3, limit: 3, remaining: 0, isPremium: false });
         }
       } else {
-        setError(e.message || "Couldn't analyze the photo. Enter manually instead.");
+        // Graceful error handling with specific messages
+        let msg = "Couldn't analyze the photo. Enter manually instead.";
+        if (e.code === 'NO_API_KEY') {
+          msg = "No AI API key set. Go to Settings → AI Provider to add your key, or use manual entry.";
+        } else if (e.code === 'NETWORK') {
+          msg = "Can't reach the AI server. Check your internet connection and try again.";
+        } else if (e.code === 'API_ERROR' && e.status === 401) {
+          msg = "Your API key is invalid. Check Settings → AI Provider.";
+        } else if (e.code === 'API_ERROR' && e.status === 429) {
+          msg = "AI provider is rate-limited. Wait a minute and try again, or add your own key in Settings.";
+        } else if (e.code === 'BAD_JSON') {
+          msg = "The AI returned an unexpected response. Try retaking the photo or enter manually.";
+        } else if (e.code === 'EMPTY') {
+          msg = "The AI didn't return any results. Try a clearer photo or enter manually.";
+        } else if (e.message) {
+          msg = e.message;
+        }
+        setError(msg);
       }
     } finally {
       setLoading(false);
@@ -216,9 +236,9 @@ export default function Analyze() {
       )}
 
       {loading && (
-        <div className="mt-6 flex flex-col items-center gap-2 text-slate-500">
-          <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-200 border-t-brand-500" />
-          <p className="text-sm">Analyzing your meal…</p>
+        <div className="mt-6 flex flex-col items-center gap-3 text-center">
+          <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-brand-500" />
+          <p className="text-sm font-medium text-slate-600">{funnyMsg}</p>
         </div>
       )}
 

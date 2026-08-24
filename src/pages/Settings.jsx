@@ -13,6 +13,8 @@ export default function Settings() {
   const [ai, setAI] = useState(null);
   const [aiSaved, setAISaved] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [feedbackMsg, setFeedbackMsg] = useState('');
+  const [feedbackStatus, setFeedbackStatus] = useState(null);
 
   useEffect(() => {
     api.settings().then(setS);
@@ -174,16 +176,24 @@ export default function Settings() {
       <section className="mt-5 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-700">Feedback</h2>
         <p className="mt-1 text-xs text-slate-400">Report a bug or suggest a feature.</p>
-        <textarea id="feedback-msg" placeholder="What went wrong? What's missing?"
+        <textarea value={feedbackMsg} onChange={(e) => setFeedbackMsg(e.target.value)}
+          placeholder="What went wrong? What's missing?"
           className="mt-2 w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" rows={3} />
         <button onClick={async () => {
-          const el = document.getElementById('feedback-msg');
-          const msg = el?.value?.trim();
-          if (!msg) return;
-          try { await api.feedback(msg, 'bug'); el.value = ''; alert('Thanks! Feedback sent.'); }
-          catch { alert('Could not send feedback. Try again later.'); }
-        }} className="mt-2 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white">
-          Send feedback
+          if (!feedbackMsg.trim()) return;
+          setFeedbackStatus('sending');
+          try {
+            await api.feedback(feedbackMsg.trim(), 'bug');
+            setFeedbackMsg('');
+            setFeedbackStatus('sent');
+            setTimeout(() => setFeedbackStatus(null), 3000);
+          } catch {
+            setFeedbackStatus('error');
+            setTimeout(() => setFeedbackStatus(null), 3000);
+          }
+        }} className="mt-2 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
+          disabled={feedbackStatus === 'sending'}>
+          {feedbackStatus === 'sending' ? 'Sending…' : feedbackStatus === 'sent' ? '✓ Sent!' : feedbackStatus === 'error' ? '✗ Failed' : 'Send feedback'}
         </button>
       </section>
 

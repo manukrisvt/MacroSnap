@@ -2,12 +2,16 @@ import { useEffect, useState, useCallback } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { todayStr, formatDate } from '../lib/image.js';
+import { getStreak, getBadges, onMealLogged, ALL_BADGES } from '../lib/gamification.js';
 import MacroRing from '../components/MacroRing.jsx';
 
 export default function Dashboard() {
   const [day, setDay] = useState(null);
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [streak, setStreak] = useState(0);
+  const [badges, setBadges] = useState([]);
+  const [newBadge, setNewBadge] = useState(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -15,6 +19,23 @@ export default function Dashboard() {
       const [d, s] = await Promise.all([api.day(todayStr()), api.settings()]);
       setDay(d);
       setSettings(s);
+      // Gamification
+      const mealCount = d.meals?.length || 0;
+      const totalCals = d.totals?.calories || 0;
+      const currentStreak = await getStreak();
+      setStreak(currentStreak);
+      const earnedBadges = await getBadges();
+      setBadges(earnedBadges);
+      // Check for new badges when meals are logged
+      if (mealCount > 0) {
+        const result = await onMealLogged(mealCount, totalCals, currentStreak);
+        if (result.newBadges.length > 0) {
+          setNewBadge(result.newBadges[0]);
+          setStreak(result.streak);
+          setBadges(await getBadges());
+          setTimeout(() => setNewBadge(null), 5000);
+        }
+      }
     } finally {
       setLoading(false);
     }
@@ -40,10 +61,44 @@ export default function Dashboard() {
   return (
     <div className="px-4">
       <header className="pt-3">
-        <p className="text-xs font-medium uppercase tracking-wide text-brand-600">MacroSnap</p>
-        <h1 className="text-xl font-bold text-slate-900">Today</h1>
-        <p className="text-xs text-slate-500">{formatDate(todayStr())}</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-medium uppercase tracking-wide text-brand-600">MacroSnap</p>
+            <h1 className="text-xl font-bold text-slate-900">Today</h1>
+            <p className="text-xs text-slate-500">{formatDate(todayStr())}</p>
+          </div>
+          {streak > 0 && (
+            <div className="flex items-center gap-1.5 rounded-full bg-orange-100 px-3 py-1.5">
+              <span className="text-base">🔥</span>
+              <span className="text-sm font-bold text-orange-600">{streak}</span>
+              <span className="text-xs text-orange-500">day{streak > 1 ? 's' : ''}</span>
+            </div>
+          )}
+        </div>
       </header>
+
+      {/* Badge celebration popup */}
+      {newBadge && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setNewBadge(null)}>
+          <div className="mx-4 rounded-3xl bg-white p-8 text-center shadow-2xl">
+            <div className="text-6xl">{newBadge.emoji}</div>
+            <p className="mt-3 text-lg font-bold text-slate-900">Badge Earned!</p>
+            <p className="mt-1 text-sm text-slate-500">{newBadge.label}</p>
+          </div>
+        </div>
+      )}
+
+      {/* Badge strip */}
+      {badges.length > 0 && (
+        <div className="mt-3 flex gap-2 overflow-x-auto no-scrollbar">
+          {ALL_BADGES.filter(b => badges.includes(b.id)).map(b => (
+            <div key={b.id} className="flex flex-col items-center rounded-xl bg-white px-3 py-2 shadow-sm" title={b.desc}>
+              <span className="text-xl">{b.emoji}</span>
+              <span className="mt-0.5 text-[9px] font-medium text-slate-500">{b.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Calorie hero card */}
       <div className="mt-3 rounded-3xl bg-gradient-to-br from-slate-900 to-slate-800 p-5 text-white shadow-lg">
