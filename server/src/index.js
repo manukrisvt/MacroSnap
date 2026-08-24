@@ -61,14 +61,18 @@ app.post('/api/feedback', async (req, res) => {
   try {
     const { message, type } = req.body || {};
     if (!message) return res.status(400).json({ error: 'Message required.' });
-    console.log(`[feedback] user=${req.userId} type=${type||'bug'}: ${message}`);
+    const userId = req.userId || 0;
+    console.log(`[feedback] user=${userId} type=${type||'bug'}: ${message}`);
     // Store in usage_log as 'feedback' so it's queryable
     await db.run(
       'INSERT INTO usage_log(user_id, endpoint, created_at) VALUES($1,$2,$3)',
-      [req.userId, `feedback:${type||'bug'}:${message.slice(0,200)}`, Date.now()]
+      [userId, `feedback:${type||'bug'}:${message.slice(0,200)}`, Date.now()]
     );
     res.json({ ok: true });
-  } catch { res.status(500).json({ error: 'Failed to submit feedback.' }); }
+  } catch (e) {
+    console.error('[feedback] error:', e.message);
+    res.status(500).json({ error: 'Failed to submit feedback.' });
+  }
 });
 
 app.use(authMiddleware);
