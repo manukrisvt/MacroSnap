@@ -56,7 +56,9 @@ app.delete('/api/account', async (req, res) => {
   } catch (err) { res.status(500).json({ error: 'Failed to delete account.' }); }
 });
 
-// ---------- feedback (logs to server console + stores in DB) ----------
+app.use(authMiddleware);
+
+// ---------- feedback (stores with real user_id) ----------
 app.post('/api/feedback', async (req, res) => {
   try {
     const { message, type } = req.body || {};
@@ -75,7 +77,43 @@ app.post('/api/feedback', async (req, res) => {
   }
 });
 
-app.use(authMiddleware);
+// ---------- admin: view feedback ----------
+app.get('/api/admin/feedback', async (req, res) => {
+  const adminKey = req.headers['x-admin-key'];
+  if (adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ error: 'Unauthorized.' });
+  }
+  try {
+    const rows = await db.all(`
+      SELECT u.id as user_id, u.email, u.name,
+             REPLACE(REPLACE(l.endpoint, 'feedback:', ''), SUBSTRING(l.endpoint FROM 1 FOR POSITION(':' IN l.endpoint)), '') as message,
+             l.endpoint, l.created_at
+      FROM usage_log l
+      LEFT JOIN users u ON u.id = l.user_id
+      WHERE l.endpoint LIKE 'feedback:%'
+      ORDER BY l.created_at DESC
+      LIMIT 100
+    `);
+    // Clean up the message extraction
+    const feedback = rows.map(r => {
+      const parts = r.endpoint.split(':');
+      const type = parts[1] || 'bug';
+      const msg = parts.slice(2).join(':');
+      return {
+        user_id: r.user_id,
+        email: r.email || 'anonymous',
+        name: r.name || '',
+        type,
+        message: msg,
+        created_at: r.created_at,
+        date: new Date(r.created_at).toISOString()
+      };
+    });
+    res.json(feedback);
+  } catch (e) {
+    res.status(500).json({ error: 'Failed to fetch feedback.' });
+  }
+});
 
 // ---------- clear all data (admin) ----------
 app.post('/api/admin/clear-all', async (req, res) => {
