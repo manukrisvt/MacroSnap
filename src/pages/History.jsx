@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api.js';
-import { formatDate } from '../lib/image.js';
+import { formatDate, MEAL_TYPES, guessMealType } from '../lib/image.js';
 import Header from '../components/Header.jsx';
 
 export default function History() {
-  const [monthOffset, setMonthOffset] = useState(0); // 0 = current month
-  const [totals, setTotals] = useState({}); // date -> { calories }
-  const [selected, setSelected] = useState(null); // date string
+  const navigate = useNavigate();
+  const [monthOffset, setMonthOffset] = useState(0);
+  const [totals, setTotals] = useState({});
+  const [selected, setSelected] = useState(null);
   const [selectedDay, setSelectedDay] = useState(null);
 
   useEffect(() => {
@@ -40,6 +42,7 @@ export default function History() {
   return (
     <div className="px-4">
       <Header title="History" subtitle="Tap a day to see meals" />
+
       <div className="mt-3 flex items-center justify-between">
         <button onClick={() => setMonthOffset((m) => m - 1)} className="rounded-lg bg-white p-2 shadow-sm">‹</button>
         <span className="text-sm font-semibold text-slate-700">
@@ -48,6 +51,7 @@ export default function History() {
         <button onClick={() => setMonthOffset((m) => m + 1)} className="rounded-lg bg-white p-2 shadow-sm">›</button>
       </div>
 
+      {/* Calendar with visual markers */}
       <div className="mt-3 rounded-2xl bg-white p-3 shadow-sm">
         <div className="grid grid-cols-7 text-center text-[10px] font-medium text-slate-400">
           {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => <div key={i}>{d}</div>)}
@@ -56,33 +60,69 @@ export default function History() {
           {cells.map((c, i) => {
             if (!c) return <div key={i} />;
             const t = totals[c.date];
+            const hasMeals = t && t.calories > 0;
             const isToday = c.date === todayStr;
             const isSel = c.date === selected;
+            const isFuture = c.date > todayStr;
             return (
-              <button key={i} onClick={() => setSelected(c.date)}
-                className={`flex aspect-square flex-col items-center justify-center rounded-lg text-xs ${
-                  isSel ? 'bg-brand-500 text-white' : isToday ? 'bg-brand-50 text-brand-700' : 'text-slate-700'
+              <button key={i} onClick={() => setSelected(c.date)} disabled={isFuture}
+                className={`relative flex aspect-square flex-col items-center justify-center rounded-lg text-xs transition-all ${
+                  isSel ? 'bg-brand-500 text-white shadow-md' 
+                  : isToday ? 'bg-brand-50 text-brand-700 ring-1 ring-brand-200'
+                  : isFuture ? 'text-slate-300'
+                  : 'text-slate-700 active:bg-slate-100'
                 }`}>
                 <span className="font-medium">{c.day}</span>
-                {t && t.calories > 0 && (
-                  <span className={`text-[8px] ${isSel ? 'text-white/80' : 'text-slate-400'}`}>{t.calories}</span>
+                {/* Visual marker dot for days with meals */}
+                {hasMeals && !isSel && (
+                  <span className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-brand-500"></span>
+                )}
+                {hasMeals && isSel && (
+                  <span className="absolute bottom-1 h-1.5 w-1.5 rounded-full bg-white"></span>
+                )}
+                {/* Calorie count for days with meals */}
+                {hasMeals && (
+                  <span className={`text-[8px] leading-none ${isSel ? 'text-white/80' : 'text-slate-400'}`}>{t.calories}</span>
                 )}
               </button>
             );
           })}
         </div>
+        {/* Legend */}
+        <div className="mt-2 flex items-center justify-center gap-4 text-[10px] text-slate-400">
+          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-brand-500"></span> Meals logged</span>
+          <span className="flex items-center gap-1"><span className="h-1.5 w-1.5 rounded-full bg-brand-200 ring-1 ring-brand-300"></span> Today</span>
+        </div>
       </div>
 
+      {/* Selected day detail */}
       {selected && selectedDay && (
         <div className="mt-4">
-          <h2 className="text-base font-bold text-slate-800">{formatDate(selected)}</h2>
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-slate-800">{formatDate(selected)}</h2>
+            {/* Add food button for this day */}
+            <button
+              onClick={() => navigate('/manual')}
+              className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white active:scale-95"
+            >+ Add food</button>
+          </div>
+
+          {/* Day summary */}
           <div className="mt-1 rounded-xl bg-white px-4 py-3 text-sm shadow-sm">
             <span className="font-semibold text-slate-800">{selectedDay.totals.calories} kcal</span>
             <span className="text-slate-400"> · P {Math.round(selectedDay.totals.protein_g)}g · C {Math.round(selectedDay.totals.carbs_g)}g · F {Math.round(selectedDay.totals.fat_g)}g</span>
           </div>
+
+          {/* Meals list */}
           <div className="mt-2 space-y-2">
             {selectedDay.meals.length === 0 && (
-              <p className="rounded-xl bg-white p-4 text-center text-sm text-slate-400">No meals logged.</p>
+              <div className="rounded-2xl bg-white p-6 text-center">
+                <p className="text-sm text-slate-400">No meals logged this day.</p>
+                <button
+                  onClick={() => navigate('/manual')}
+                  className="mt-3 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white active:scale-95"
+                >Log a meal →</button>
+              </div>
             )}
             {selectedDay.meals.map((m) => (
               <div key={m.id} className="rounded-2xl bg-white p-3 shadow-sm">
@@ -110,6 +150,20 @@ export default function History() {
               </div>
             ))}
           </div>
+
+          {/* Quick add buttons for this day */}
+          {selectedDay.meals.length > 0 && (
+            <div className="mt-3 flex gap-2">
+              <button
+                onClick={() => navigate('/analyze')}
+                className="flex-1 rounded-xl bg-brand-500 py-2.5 text-xs font-semibold text-white active:scale-95"
+              >📸 Snap meal</button>
+              <button
+                onClick={() => navigate('/manual')}
+                className="flex-1 rounded-xl bg-white py-2.5 text-xs font-semibold text-slate-600 shadow-sm active:scale-95"
+              >✏️ Add manually</button>
+            </div>
+          )}
         </div>
       )}
     </div>
