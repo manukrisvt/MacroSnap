@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import './index.css';
 import App from './App.jsx';
-import { isLoggedIn, logout } from './lib/api.js';
+import { isLoggedIn, logout, api } from './lib/api.js';
 import Login from './pages/Login.jsx';
 import Onboarding from './pages/Onboarding.jsx';
 import Dashboard from './pages/Dashboard.jsx';
@@ -16,11 +16,32 @@ import Favorites from './pages/Favorites.jsx';
 
 function AuthGate() {
   const [authed, setAuthed] = React.useState(isLoggedIn());
-  const [onboarded, setOnboarded] = React.useState(() => {
-    try { return localStorage.getItem('macrosnap_onboarded') === 'true'; } catch { return false; }
-  });
+  const [onboarded, setOnboarded] = React.useState(null); // null = checking, true/false = result
+  const [checking, setChecking] = React.useState(true);
+
+  // Check if user has already set their goals (on server, not just localStorage)
+  React.useEffect(() => {
+    if (!authed) { setChecking(false); return; }
+    // Check localStorage first (fast path)
+    try {
+      if (localStorage.getItem('macrosnap_onboarded') === 'true') {
+        setOnboarded(true);
+        setChecking(false);
+        return;
+      }
+    } catch {}
+    // Fallback: check server for calorie_goal
+    api.settings().then(s => {
+      setOnboarded(!!(s && s.calorie_goal));
+      setChecking(false);
+    }).catch(() => {
+      setOnboarded(false);
+      setChecking(false);
+    });
+  }, [authed]);
 
   if (!authed) return <Login onAuthed={() => setAuthed(true)} />;
+  if (checking) return <div className="flex h-full items-center justify-center text-sm text-slate-400">Loading…</div>;
   if (!onboarded) return <Onboarding onDone={() => {
     try { localStorage.setItem('macrosnap_onboarded', 'true'); } catch {}
     setOnboarded(true);
