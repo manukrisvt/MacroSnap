@@ -70,8 +70,8 @@ app.post('/api/feedback', async (req, res) => {
     );
     res.json({ ok: true });
   } catch (e) {
-    console.error('[feedback] error:', e.message);
-    res.status(500).json({ error: 'Failed to submit feedback.' });
+    console.error('[feedback] error:', e.message, e.code);
+    res.status(500).json({ error: 'Failed to submit feedback.', detail: e.message });
   }
 });
 
