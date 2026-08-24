@@ -102,7 +102,7 @@ export default function History() {
             <h2 className="text-base font-bold text-slate-800">{formatDate(selected)}</h2>
             {/* Add food button for this day */}
             <button
-              onClick={() => navigate('/manual')}
+              onClick={() => navigate(`/analyze?date=${selected}`)}
               className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white active:scale-95"
             >+ Add food</button>
           </div>
@@ -119,9 +119,13 @@ export default function History() {
               <div className="rounded-2xl bg-white p-6 text-center">
                 <p className="text-sm text-slate-400">No meals logged this day.</p>
                 <button
-                  onClick={() => navigate('/manual')}
+                  onClick={() => navigate(`/analyze?date=${selected}`)}
                   className="mt-3 rounded-lg bg-brand-500 px-4 py-2 text-sm font-semibold text-white active:scale-95"
-                >Log a meal →</button>
+                >📸 Snap meal →</button>
+                <button
+                  onClick={() => navigate(`/manual?date=${selected}`)}
+                  className="mt-2 ml-2 rounded-lg bg-white px-4 py-2 text-sm font-semibold text-slate-600 shadow-sm active:scale-95"
+                >✏️ Manual →</button>
               </div>
             )}
             {selectedDay.meals.map((m) => (
@@ -155,11 +159,11 @@ export default function History() {
           {selectedDay.meals.length > 0 && (
             <div className="mt-3 flex gap-2">
               <button
-                onClick={() => navigate('/analyze')}
+                onClick={() => navigate(`/analyze?date=${selected}`)}
                 className="flex-1 rounded-xl bg-brand-500 py-2.5 text-xs font-semibold text-white active:scale-95"
               >📸 Snap meal</button>
               <button
-                onClick={() => navigate('/manual')}
+                onClick={() => navigate(`/manual?date=${selected}`)}
                 className="flex-1 rounded-xl bg-white py-2.5 text-xs font-semibold text-slate-600 shadow-sm active:scale-95"
               >✏️ Add manually</button>
             </div>

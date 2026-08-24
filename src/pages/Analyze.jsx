@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { api } from '../lib/api.js';
@@ -14,6 +14,8 @@ const isNative = Capacitor.isNativePlatform();
 
 export default function Analyze() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const selectedDate = searchParams.get('date'); // from history page
   const fileRef = useRef(null);
   const cameraRef = useRef(null);
 
@@ -167,7 +169,7 @@ export default function Analyze() {
       let thumb = null;
       if (preview) thumb = await makeThumbnail(preview, 256, 0.6);
       await api.addMeal({
-        date: todayStr(),
+        date: selectedDate || todayStr(),
         meal_type: mealType,
         photo_thumb: thumb,
         items: result.foods.map((f) => ({

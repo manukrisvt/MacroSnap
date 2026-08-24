@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { MEAL_TYPES, guessMealType, todayStr } from '../lib/image.js';
 import Header from '../components/Header.jsx';
 
 export default function ManualAdd() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const selectedDate = searchParams.get('date');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState([]);
   const [selected, setSelected] = useState([]); // chosen foods
@@ -63,7 +65,7 @@ export default function ManualAdd() {
     setSaving(true);
     try {
       await api.addMeal({
-        date: todayStr(),
+        date: selectedDate || todayStr(),
         meal_type: mealType,
         photo_thumb: null,
         items: selected.map((f) => ({
