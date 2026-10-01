@@ -14,9 +14,10 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm install --omit=dev
 
-# Copy the built frontend + server source
+# Copy the built frontend + server source + shared modules
 COPY --from=build /app/dist ./dist
 COPY server/src/ ./server/src/
+COPY shared/ ./shared/
 COPY capacitor.config.json ./
 
 ENV HOST=0.0.0.0
