@@ -25,7 +25,11 @@ export default defineConfig({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,ico}'],
-        navigateFallback: 'index.html'
+        navigateFallback: 'index.html',
+        // New deploys activate immediately instead of waiting for all
+        // tabs to close — prevents stale-chunk import errors.
+        skipWaiting: true,
+        clientsClaim: true
       },
       devOptions: { enabled: true }
     })

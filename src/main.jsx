@@ -62,6 +62,21 @@ function AuthGate() {
   );
 }
 
+// Self-heal after deploys: if a stale cached index.html references a JS chunk
+// that no longer exists on the server (asset hash changed), the dynamic
+// import fails. Detect that and force one clean reload so the browser picks
+// up the new index.html + service worker.
+window.addEventListener('error', (e) => {
+  const msg = String(e?.message || '');
+  if (/Failed to fetch dynamically imported module|Importing a module script failed/i.test(msg)) {
+    // Guard against reload loops: only reload once per session for this error.
+    if (!sessionStorage.getItem('macrosnap_stale_reload')) {
+      sessionStorage.setItem('macrosnap_stale_reload', '1');
+      window.location.reload();
+    }
+  }
+});
+
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <HashRouter>
