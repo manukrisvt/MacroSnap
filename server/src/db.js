@@ -167,7 +167,10 @@ async function initDB(retries = 5) {
 
 initDB();
 
-export const DEFAULT_SETTINGS = { calorie_goal: '2000', protein_goal: '150', carbs_goal: '225', fat_goal: '67', macro_unit: 'g' };
+// Seed non-goal defaults only. calorie_goal is intentionally NOT seeded:
+// an empty calorie_goal is the signal that the user hasn't completed
+// onboarding, which routes them to the setup quiz.
+export const DEFAULT_SETTINGS = { macro_unit: 'g' };
 
 export async function seedUserSettings(userId) {
   for (const [k, v] of Object.entries(DEFAULT_SETTINGS)) {

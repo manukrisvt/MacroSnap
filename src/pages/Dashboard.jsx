@@ -54,6 +54,7 @@ export default function Dashboard() {
   if (loading) return <div className="p-4 text-sm text-slate-400">Loading…</div>;
   if (!day) return null;
 
+  const hasGoal = !!settings?.calorie_goal;
   const goal = Number(settings?.calorie_goal) || 2000;
   const pGoal = Number(settings?.protein_goal) || 150;
   const cGoal = Number(settings?.carbs_goal) || 225;
