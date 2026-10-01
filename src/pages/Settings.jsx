@@ -121,6 +121,34 @@ export default function Settings() {
       {/* ===== MY RECIPES (Phase 4) ===== */}
       <MyRecipesSection />
 
+      {/* ===== REDO SETUP ===== */}
+      <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-slate-700">Your plan</h2>
+        <p className="mt-1 text-xs text-slate-400">
+          Re-run the setup quiz — goals, body, activity, pace — prefilled with your current answers.
+        </p>
+        <button
+          onClick={() => {
+            try {
+              const ctx = JSON.parse(localStorage.getItem('macrosnap_plan_context') || '{}');
+              localStorage.setItem('macrosnap_onboarding_draft', JSON.stringify({
+                goal: ctx.goal || 'lose',
+                sex: ctx.sex || 'male',
+                birthYear: String(new Date().getFullYear() - (ctx.age || 30)),
+                heightCm: 175, weightKg: ctx.weightKg || 75,
+                activity: ctx.activity || 'light',
+                pace: ctx.pace || 0.5,
+                diet: ctx.diet || 'non_veg',
+                macroStyle: ctx.macroStyle || 'balanced'
+              }));
+              localStorage.removeItem('macrosnap_onboarded');
+            } catch {}
+            window.location.reload();
+          }}
+          className="mt-3 w-full rounded-xl bg-slate-900 py-3 text-sm font-semibold text-white active:scale-[.98] dark:bg-slate-700"
+        >↻ Redo setup</button>
+      </section>
+
       {/* ===== GOALS ===== */}
       <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-700">Daily calorie goal</h2>
