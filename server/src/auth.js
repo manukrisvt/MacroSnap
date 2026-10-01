@@ -178,7 +178,7 @@ async function verifyAppleIdentityToken(idToken) {
   if (header.alg !== 'RS256') return null;
 
   // Verify audience matches our bundle ID
-  const expectedAud = process.env.APPLE_BUNDLE_ID || 'com.macrosnap.app';
+  const expectedAud = process.env.APPLE_BUNDLE_ID || 'com.manukrisvt.macrosnap';
   if (payload.aud !== expectedAud) return null;
   // Verify issuer
   if (payload.iss !== 'https://appleid.apple.com') return null;
