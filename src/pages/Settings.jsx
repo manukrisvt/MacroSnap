@@ -137,7 +137,7 @@ export default function Settings() {
                 <p className="text-sm font-semibold">Upgrade to Basic</p>
                 <p className="text-xs text-white/80">90 snaps / month (~3 a day)</p>
               </div>
-              <p className="font-bold">$2/mo</p>
+              <p className="font-bold">$1.99/mo</p>
             </button>
             <button onClick={() => startCheckout('plus')}
               className="flex w-full items-center justify-between rounded-xl bg-emerald-500 px-4 py-3 text-left text-white active:scale-[.98]">
@@ -145,7 +145,7 @@ export default function Settings() {
                 <p className="text-sm font-semibold">Upgrade to Plus</p>
                 <p className="text-xs text-white/80">500 snaps / month — for power users</p>
               </div>
-              <p className="font-bold">$10/mo</p>
+              <p className="font-bold">$8.99/mo</p>
             </button>
             {checkoutError && <p className="text-xs text-rose-500">{checkoutError}</p>}
             {!byoActive && (

@@ -15,7 +15,7 @@ export const PLANS = {
   basic: {
     id: 'basic',
     label: 'Basic',
-    priceUsd: 2,
+    priceUsd: 1.99,
     snapsPerMonth: 90,    // ~3/day
     lifetimeQuota: false,
     tagline: 'For daily tracking'
@@ -23,7 +23,7 @@ export const PLANS = {
   plus: {
     id: 'plus',
     label: 'Plus',
-    priceUsd: 10,
+    priceUsd: 8.99,
     snapsPerMonth: 500,   // ~16/day
     lifetimeQuota: false,
     tagline: 'For power users'

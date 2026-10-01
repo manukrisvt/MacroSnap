@@ -502,7 +502,7 @@ export default function Analyze() {
                 <p className="font-semibold">Basic</p>
                 <p className="text-xs text-white/80">90 snaps / month (~3 a day)</p>
               </div>
-              <p className="text-lg font-bold">$2<span className="text-xs font-normal text-white/80">/mo</span></p>
+              <p className="text-lg font-bold">$1.99<span className="text-xs font-normal text-white/80">/mo</span></p>
             </button>
             <button
               onClick={() => startCheckout('plus')}
@@ -512,7 +512,7 @@ export default function Analyze() {
                 <p className="font-semibold">Plus</p>
                 <p className="text-xs text-white/80">500 snaps / month — for power users</p>
               </div>
-              <p className="text-lg font-bold">$10<span className="text-xs font-normal text-white/80">/mo</span></p>
+              <p className="text-lg font-bold">$8.99<span className="text-xs font-normal text-white/80">/mo</span></p>
             </button>
             <Link to="/settings"
               className="block rounded-xl border border-slate-700 py-3 text-center text-sm font-medium text-slate-300">
