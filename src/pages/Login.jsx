@@ -5,12 +5,11 @@ import { api, setAuth } from '../lib/api.js';
 const isIOSApp = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
 
 async function appleSignInNative() {
-  const { SignInWithApple } = await import('@capawesome/capacitor-apple-sign-in');
-  const result = await SignInWithApple.authorize({
-    clientId: 'com.macrosnap.app',
-    scopes: ['name', 'email']
+  const { AppleSignIn, SignInScope } = await import('@capawesome/capacitor-apple-sign-in');
+  const result = await AppleSignIn.signIn({
+    scopes: [SignInScope.FullName, SignInScope.Email]
   });
-  return result.token?.idToken || result.identityToken;
+  return result.idToken;
 }
 
 export default function Login({ onAuthed }) {
