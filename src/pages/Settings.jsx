@@ -245,7 +245,11 @@ function AIProviderSection({ ai, setAI, saved, setSaved }) {
     setAI((prev) => ({ ...prev, byoProvider: id, byoBaseUrl: p.baseUrl || prev.byoBaseUrl }));
   }
   async function save() {
-    await saveAISettings(ai);
+    // Trim key/base URL — pasted keys often carry trailing spaces/newlines
+    // that cause 401 "Missing Authentication header" at the provider.
+    const cleaned = { ...ai, byoApiKey: (ai.byoApiKey || '').trim(), byoBaseUrl: (ai.byoBaseUrl || '').trim(), byoModel: (ai.byoModel || '').trim() };
+    setAI(cleaned);
+    await saveAISettings(cleaned);
     setSaved(true);
     setTimeout(() => setSaved(false), 1500);
   }

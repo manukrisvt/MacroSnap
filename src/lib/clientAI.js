@@ -16,7 +16,9 @@ function stripJson(text) {
 }
 
 export async function analyzeMealImageDirect(dataUrl, settings, context = {}) {
-  const { byoBaseUrl, byoApiKey, byoModel } = settings;
+  const byoBaseUrl = (settings.byoBaseUrl || '').trim();
+  const byoApiKey = (settings.byoApiKey || '').trim();
+  const byoModel = (settings.byoModel || '').trim();
   if (!byoApiKey) {
     const err = new Error('No API key set. Add your key in Settings → AI Provider.');
     err.code = 'NO_API_KEY';
@@ -67,6 +69,9 @@ export async function analyzeMealImageDirect(dataUrl, settings, context = {}) {
     const err = new Error(`AI provider error ${res.status}: ${txt.slice(0, 200)}`);
     err.code = 'API_ERROR';
     err.status = res.status;
+    if (res.status === 401) {
+      err.message = 'Invalid API key (401). Check the key has no extra spaces, and that it is from the selected provider — e.g. an OpenRouter key (sk-or-v1-…) must use OpenRouter, a Google AI Studio key (AIza…) will not work there.';
+    }
     throw err;
   }
 
