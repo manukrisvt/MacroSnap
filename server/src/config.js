@@ -2,7 +2,7 @@
 // without hunting through the codebase. Bump PROMPT_VERSION whenever the
 // system prompt in moonshot.js changes, so ai_estimates rows stay comparable.
 
-export const PROMPT_VERSION = '1.0';
+export const PROMPT_VERSION = '2.0';
 
 // Phase 3 placeholder — grams of cooking fat per level, per meal.
 export const FAT_GRAMS = { none: 0, light: 5, normal: 10, heavy: 20 };

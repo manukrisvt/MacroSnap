@@ -35,11 +35,19 @@ export default function Analyze() {
   const aiSettingsRef = useRef(null);
   const [verified, setVerified] = useState(false); // "I weighed this" mode
   const [gtItems, setGtItems] = useState([]); // ground-truth items when verified
+  // Phase 2: "Help the AI"
+  const [hint, setHint] = useState('');
+  const [mealSource, setMealSource] = useState(null); // 'Home-cooked' | 'Restaurant' | 'Packaged'
+  const [showCorrection, setShowCorrection] = useState(false);
+  const [correctionText, setCorrectionText] = useState('');
+  const [reanalyzing, setReanalyzing] = useState(false);
 
   async function handleDataUrl(dataUrl) {
     const b64 = dataUrl.split(',')[1];
     setPreview(dataUrl);
     setBase64(b64);
+    // Phase 2: photo is captured — user can add a hint before analyzing.
+    // Analysis starts immediately; hint applies to re-analyze.
     analyze(b64);
   }
 
@@ -86,7 +94,7 @@ export default function Analyze() {
     else fileRef.current?.click();
   }
 
-  async function analyze(b64) {
+  async function analyze(b64, extraContext = {}) {
     setLoading(true);
     setError(null);
     setQuotaExceeded(null);
@@ -95,18 +103,19 @@ export default function Analyze() {
       const aiSettings = await getAISettings();
       aiSettingsRef.current = aiSettings;
       let r;
+      const context = { hint: hint || undefined, mealSource: mealSource || undefined, ...extraContext };
       if (aiSettings.aiMode === 'byo' && aiSettings.byoApiKey) {
         // BYO key — call AI directly from device, key never touches server, no quota
         const dataUrl = `data:image/jpeg;base64,${b64}`;
-        r = await analyzeMealImageDirect(dataUrl, aiSettings);
+        r = await analyzeMealImageDirect(dataUrl, aiSettings, context);
       } else {
         // Server mode — use cloud backend's API key (quota limited)
-        r = await api.analyze(b64, 'image/jpeg');
+        r = await api.analyze(b64, 'image/jpeg', context);
       }
       // Capture raw output immediately, before any user edits, for ai_estimates.
       rawResultRef.current = { ...r, foods: (r.foods || []).map((f) => ({ ...f })) };
       const foods = (r.foods || []).map((f) => ({ ...f, multiplier: 1 }));
-      setResult({ foods, total_calories: r.total_calories, confidence: r.confidence });
+      setResult({ foods, total_calories: r.total_calories, confidence: r.confidence, visible_fat_cues: r.visible_fat_cues || [], clarifying_question: r.clarifying_question || null });
       if (r.quota) setQuotaInfo(r.quota);
       if (foods.length === 0) setError('No foods detected. Enter manually instead.');
     } catch (e) {
@@ -147,6 +156,48 @@ export default function Analyze() {
     setResult((prev) => ({ ...prev, foods: items }));
   }
 
+  // Phase 2: re-analyze with extra context (hint, correction, clarifying answer).
+  // Does NOT consume a free snap (server-side /api/reanalyze is quota-free,
+  // rate-limited to 3 per 10 min).
+  async function reanalyze(extraContext) {
+    if (!base64 || reanalyzing) return;
+    setReanalyzing(true);
+    setError(null);
+    try {
+      const aiSettings = aiSettingsRef.current || (await getAISettings());
+      aiSettingsRef.current = aiSettings;
+      let r;
+      if (aiSettings.aiMode === 'byo' && aiSettings.byoApiKey) {
+        const dataUrl = `data:image/jpeg;base64,${base64}`;
+        r = await analyzeMealImageDirect(dataUrl, aiSettings, extraContext);
+      } else {
+        r = await api.reanalyze(base64, 'image/jpeg', extraContext);
+      }
+      const foods = (r.foods || []).map((f) => ({ ...f, multiplier: 1 }));
+      setResult({ foods, total_calories: r.total_calories, confidence: r.confidence, visible_fat_cues: r.visible_fat_cues || [], clarifying_question: r.clarifying_question || null });
+      if (foods.length === 0) setError('No foods detected. Enter manually instead.');
+    } catch (e) {
+      if (e.status === 429) {
+        setError(e.message || 'Too many re-analyses. Edit items manually instead.');
+      } else {
+        setError("Couldn't re-analyze. You can still edit the items manually below.");
+      }
+    } finally {
+      setReanalyzing(false);
+      setShowCorrection(false);
+      setCorrectionText('');
+    }
+  }
+
+  function answerClarifying(answer) {
+    reanalyze({ clarifyingAnswer: answer });
+  }
+
+  function submitCorrection() {
+    if (!correctionText.trim()) return;
+    reanalyze({ previousOutput: rawResultRef.current, correctionText: correctionText.trim() });
+  }
+
   const totalCal = verified
     ? gtItems.reduce((s, f) => s + Math.round((f.calories || 0) * (f.multiplier || 1)), 0)
     : (result?.foods || []).reduce((s, f) => s + Math.round((f.calories || 0) * (f.multiplier || 1)), 0);
@@ -162,8 +213,9 @@ export default function Analyze() {
       const ai_estimate = raw
         ? {
             model_name: aiSettingsModelName(),
-            prompt_version: '1.0',
+            prompt_version: '2.0',
             raw_model_output: raw,
+            user_hint: [hint, mealSource].filter(Boolean).join(' — ') || null,
             final_items: verified ? null : items.map(cleanItem),
             ground_truth_items: verified ? items.map(cleanItem) : null,
             is_verified: verified,
@@ -262,6 +314,27 @@ export default function Analyze() {
       {preview && (
         <div className="mt-3">
           <img src={preview} alt="meal" className="max-h-64 w-full rounded-2xl object-cover" />
+          {/* Phase 2: optional hint + quick source chips */}
+          <input
+            value={hint}
+            onChange={(e) => setHint(e.target.value)}
+            placeholder="Anything the AI should know? (e.g. homemade chicken curry, 2 rotis)"
+            className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm"
+          />
+          <div className="mt-2 flex gap-2">
+            {['Home-cooked', 'Restaurant', 'Packaged'].map((s) => (
+              <button key={s} onClick={() => setMealSource((cur) => (cur === s ? null : s))}
+                className={`flex-1 rounded-xl py-2 text-xs font-medium ${
+                  mealSource === s ? 'bg-brand-500 text-white' : 'bg-white text-slate-500'
+                }`}>{s}</button>
+            ))}
+          </div>
+          {hint && !result && !loading && (
+            <button
+              onClick={() => base64 && analyze(base64)}
+              className="mt-2 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white"
+            >Analyze with this hint</button>
+          )}
         </div>
       )}
 
@@ -322,6 +395,66 @@ export default function Analyze() {
             <span className="text-sm text-slate-500">Confidence</span>
             <OverallConfidence level={result.confidence} />
           </div>
+
+          {/* Phase 2: visible fat cues from the model */}
+          {result.visible_fat_cues?.length > 0 && (
+            <div className="rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
+              <span className="font-semibold">Visible fat: </span>
+              {result.visible_fat_cues.join(' · ')}
+            </div>
+          )}
+
+          {/* Phase 2: clarifying question with tappable options */}
+          {result.clarifying_question && !reanalyzing && (
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <p className="text-sm font-semibold text-slate-800">🤔 {result.clarifying_question.question}</p>
+              <div className="mt-2 flex flex-wrap gap-2">
+                {result.clarifying_question.options.map((opt) => (
+                  <button key={opt} onClick={() => answerClarifying(opt)}
+                    className="rounded-full bg-brand-100 px-4 py-2 text-xs font-medium text-brand-700 active:bg-brand-200">
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Phase 2: "Not right? Tell the AI" */}
+          {!verified && (
+            <div className="rounded-2xl bg-white p-3 shadow-sm">
+              {!showCorrection ? (
+                <button onClick={() => setShowCorrection(true)}
+                  className="w-full rounded-xl bg-slate-100 py-2.5 text-sm font-medium text-slate-600">
+                  💬 Not right? Tell the AI
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <textarea
+                    autoFocus
+                    value={correctionText}
+                    onChange={(e) => setCorrectionText(e.target.value)}
+                    placeholder="e.g. it's sambar not rasam, and there are 3 rotis not 2"
+                    rows={2}
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <button onClick={() => { setShowCorrection(false); setCorrectionText(''); }}
+                      className="flex-1 rounded-xl bg-slate-100 py-2 text-sm font-medium text-slate-500">Cancel</button>
+                    <button onClick={submitCorrection} disabled={reanalyzing || !correctionText.trim()}
+                      className="flex-1 rounded-xl bg-brand-500 py-2 text-sm font-semibold text-white disabled:opacity-60">
+                      {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'}
+                    </button>
+                  </div>
+                </div>
+              )}
+              {reanalyzing && (
+                <div className="mt-2 flex items-center justify-center gap-2 text-xs text-slate-400">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-slate-200 border-t-brand-500" />
+                  Asking the AI again…
+                </div>
+              )}
+            </div>
+          )}
 
           <div className="flex gap-2">
             {MEAL_TYPES.map((m) => (

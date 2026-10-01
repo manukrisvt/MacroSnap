@@ -188,17 +188,47 @@ app.get('/api/admin/export/ai-estimates', async (req, res) => {
 // ---------- photo analysis ----------
 app.post('/api/analyze', async (req, res) => {
   try {
-    const { image, mimeType } = req.body || {};
+    const { image, mimeType, hint, mealSource } = req.body || {};
     if (!image) return res.status(400).json({ error: 'No image provided.' });
     const quota = await checkQuota(req.userId);
     if (!quota.allowed) {
       return res.status(402).json({ error: 'You have used all 3 free photo analyses.', code: 'QUOTA_EXCEEDED', quota, upgrade: true });
     }
-    const result = await analyzeMealImage(image, mimeType);
+    const result = await analyzeMealImage(image, mimeType, { hint, mealSource });
     await logSnap(req.userId);
     res.json({ ...result, quota: await checkQuota(req.userId) });
   } catch (err) {
     console.error('[analyze] error:', err.message);
+    res.status(502).json({ error: err.message, code: err.code, fallback: true });
+  }
+});
+
+// ---------- re-analyze (hint / correction / clarifying answer) ----------
+// Does NOT consume a free snap — it refines the same meal. Rate-limited to
+// 3 re-analyses per user per 10 minutes to protect API costs.
+const reanalyzeCounts = new Map(); // userId -> { count, windowStart }
+app.post('/api/reanalyze', async (req, res) => {
+  try {
+    const { image, mimeType, hint, mealSource, previousOutput, correctionText, clarifyingAnswer } = req.body || {};
+    if (!image) return res.status(400).json({ error: 'No image provided.' });
+
+    // Rate limit: 3 re-analyzes per user per 10-minute window
+    const now = Date.now();
+    const WINDOW = 10 * 60 * 1000;
+    let entry = reanalyzeCounts.get(req.userId);
+    if (!entry || now - entry.windowStart > WINDOW) {
+      entry = { count: 0, windowStart: now };
+      reanalyzeCounts.set(req.userId, entry);
+    }
+    if (entry.count >= 3) {
+      return res.status(429).json({ error: 'Too many re-analyses. Wait a few minutes or edit items manually.', code: 'REANALYZE_LIMIT' });
+    }
+    entry.count++;
+
+    const result = await analyzeMealImage(image, mimeType, { hint, mealSource, previousOutput, correctionText, clarifyingAnswer });
+    res.json(result);
+  } catch (err) {
+    console.error('[reanalyze] error:', err.message);
     res.status(502).json({ error: err.message, code: err.code, fallback: true });
   }
 });

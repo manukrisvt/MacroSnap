@@ -79,8 +79,12 @@ export const api = {
   deleteAccount: () => req('/account', { method: 'DELETE' }),
   feedback: (message, type) => req('/feedback', { method: 'POST', body: JSON.stringify({ message, type }) }),
 
-  analyze: (image, mimeType) =>
-    req('/analyze', { method: 'POST', body: JSON.stringify({ image, mimeType }) }),
+  analyze: (image, mimeType, context = {}) =>
+    req('/analyze', { method: 'POST', body: JSON.stringify({ image, mimeType, ...context }) }),
+
+  // Re-analyze with hint/correction — does NOT consume a free snap.
+  reanalyze: (image, mimeType, context = {}) =>
+    req('/reanalyze', { method: 'POST', body: JSON.stringify({ image, mimeType, ...context }) }),
 
   foods: (q = '') => req(`/foods${q ? `?q=${encodeURIComponent(q)}` : ''}`),
   addFood: (food) => req('/foods', { method: 'POST', body: JSON.stringify(food) }),
