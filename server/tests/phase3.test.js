@@ -54,10 +54,10 @@ test('defaultFatLevel: restaurant -> normal', () => {
   assert.equal(defaultFatLevel([], 'Restaurant'), 'normal');
 });
 
-test('defaultFatLevel: no cues, home-cooked or unknown -> light', () => {
+test('defaultFatLevel: home-cooked -> light, raw/packaged/unknown -> none', () => {
   assert.equal(defaultFatLevel([], 'Home-cooked'), 'light');
-  assert.equal(defaultFatLevel([], null), 'light');
-  assert.equal(defaultFatLevel([], 'Packaged'), 'light');
+  assert.equal(defaultFatLevel([], null), 'none');
+  assert.equal(defaultFatLevel([], 'Packaged'), 'none');
 });
 
 test('fat kcal math is consistent across all levels', () => {

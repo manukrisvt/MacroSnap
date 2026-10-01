@@ -124,5 +124,9 @@ export const api = {
   startCheckout: (planId) => req('/checkout', { method: 'POST', body: JSON.stringify({ planId }) }),
 
   // Sign in with Apple
-  appleSignIn: (identityToken) => req('/auth/apple', { method: 'POST', body: JSON.stringify({ identityToken }) })
+  appleSignIn: (identityToken) => req('/auth/apple', { method: 'POST', body: JSON.stringify({ identityToken }) }),
+
+  // Meal editing
+  updateMeal: (id, data) => req(`/meals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteMeal: (id) => req(`/meals/${id}`, { method: 'DELETE' })
 };

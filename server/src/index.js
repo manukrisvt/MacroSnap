@@ -440,6 +440,29 @@ app.delete('/api/meals/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// Edit a logged meal: replace its items (and meal type).
+app.put('/api/meals/:id', async (req, res) => {
+  const { meal_type, items } = req.body || {};
+  const meal = await db.get('SELECT * FROM meals WHERE id=$1 AND user_id=$2', [req.params.id, req.userId]);
+  if (!meal) return res.status(404).json({ error: 'Not found' });
+  await db.transaction(async (tx) => {
+    if (meal_type) {
+      await tx.run('UPDATE meals SET meal_type=$1 WHERE id=$2', [meal_type, meal.id]);
+    }
+    if (items) {
+      await tx.run('DELETE FROM meal_items WHERE meal_id=$1', [meal.id]);
+      for (const it of items) {
+        await tx.run(
+          'INSERT INTO meal_items(meal_id,name,portion,multiplier,calories,protein_g,carbs_g,fat_g,fiber_g,grams,confidence) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+          [meal.id, it.name, it.portion||'', Number(it.multiplier)||1, Math.round(Number(it.calories)||0), Number(it.protein_g)||0, Number(it.carbs_g)||0, Number(it.fat_g)||0, Number(it.fiber_g)||0, it.grams != null ? Number(it.grams) : null, it.confidence || null]
+        );
+      }
+    }
+  });
+  const updated = await db.get('SELECT * FROM meals WHERE id=$1', [meal.id]);
+  res.json(await rowToMealWithItems(updated));
+});
+
 // ---------- user recipes (Phase 4) ----------
 import { computeRecipeMacros, matchRecipe } from '../../shared/recipeLogic.js';
 

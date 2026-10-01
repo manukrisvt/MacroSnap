@@ -10,6 +10,33 @@ export default function History() {
   const [totals, setTotals] = useState({});
   const [selected, setSelected] = useState(null);
   const [selectedDay, setSelectedDay] = useState(null);
+  const [editingMeal, setEditingMeal] = useState(null); // meal being edited
+
+  async function deleteMeal(mealId) {
+    if (!confirm('Delete this meal? This cannot be undone.')) return;
+    await api.deleteMeal(mealId);
+    setSelectedDay((d) => ({ ...d, meals: d.meals.filter((m) => m.id !== mealId) }));
+    // Refresh month totals
+    api.history(90).then((rows) => {
+      const map = {};
+      for (const r of rows) map[r.date] = r;
+      setTotals(map);
+    });
+  }
+
+  async function saveMealEdit() {
+    if (!editingMeal) return;
+    await api.updateMeal(editingMeal.id, {
+      meal_type: editingMeal.meal_type,
+      items: editingMeal.items.map((it) => ({
+        ...it,
+        calories: Math.round(Number(it.calories) || 0),
+        multiplier: Number(it.multiplier) || 1
+      }))
+    });
+    setEditingMeal(null);
+    api.day(selected).then(setSelectedDay);
+  }
 
   useEffect(() => {
     api.history(90).then((rows) => {
@@ -130,27 +157,82 @@ export default function History() {
             )}
             {selectedDay.meals.map((m) => (
               <div key={m.id} className="rounded-2xl bg-white p-3 shadow-sm">
-                <div className="flex items-center gap-3">
-                  {m.photo_thumb ? (
-                    <img src={m.photo_thumb} alt="" className="h-14 w-14 rounded-xl object-cover" />
-                  ) : (
-                    <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-2xl">🍽️</div>
-                  )}
-                  <div className="flex-1">
-                    <p className="text-sm font-semibold capitalize text-slate-800">{m.meal_type}</p>
-                    <p className="text-xs text-slate-500">
-                      {m.items.reduce((s, i) => s + i.calories, 0)} kcal · {m.items.length} item(s)
-                    </p>
-                  </div>
-                </div>
-                <div className="mt-2 space-y-1">
-                  {m.items.map((it) => (
-                    <div key={it.id} className="flex justify-between text-xs">
-                      <span className="text-slate-600">{it.name}{it.multiplier !== 1 ? ` (${it.multiplier}x)` : ''}</span>
-                      <span className="text-slate-400">{it.calories} kcal</span>
+                {editingMeal?.id === m.id ? (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <select
+                        value={editingMeal.meal_type}
+                        onChange={(e) => setEditingMeal({ ...editingMeal, meal_type: e.target.value })}
+                        className="rounded-lg border border-slate-200 px-2 py-1 text-sm capitalize"
+                      >
+                        {MEAL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                      </select>
+                      <div className="flex gap-2">
+                        <button onClick={saveMealEdit}
+                          className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white active:scale-95">Save</button>
+                        <button onClick={() => setEditingMeal(null)}
+                          className="rounded-lg bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-600 active:scale-95">Cancel</button>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                    {editingMeal.items.map((it, idx) => (
+                      <div key={idx} className="flex items-center gap-2">
+                        <input
+                          value={it.name}
+                          onChange={(e) => {
+                            const items = [...editingMeal.items];
+                            items[idx] = { ...it, name: e.target.value };
+                            setEditingMeal({ ...editingMeal, items });
+                          }}
+                          className="min-w-0 flex-1 rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                        />
+                        <input
+                          type="number"
+                          value={it.calories}
+                          onChange={(e) => {
+                            const items = [...editingMeal.items];
+                            items[idx] = { ...it, calories: Number(e.target.value) || 0 };
+                            setEditingMeal({ ...editingMeal, items });
+                          }}
+                          className="w-20 rounded-lg border border-slate-200 px-2 py-1.5 text-xs"
+                        />
+                        <span className="text-[10px] text-slate-400">kcal</span>
+                        <button
+                          onClick={() => setEditingMeal({ ...editingMeal, items: editingMeal.items.filter((_, i) => i !== idx) })}
+                          className="rounded-lg bg-rose-50 px-2 py-1.5 text-xs text-rose-600 active:scale-95">✕</button>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3">
+                      {m.photo_thumb ? (
+                        <img src={m.photo_thumb} alt="" className="h-14 w-14 rounded-xl object-cover" />
+                      ) : (
+                        <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-slate-100 text-2xl">🍽️</div>
+                      )}
+                      <div className="flex-1">
+                        <p className="text-sm font-semibold capitalize text-slate-800">{m.meal_type}</p>
+                        <p className="text-xs text-slate-500">
+                          {m.items.reduce((s, i) => s + i.calories, 0)} kcal · {m.items.length} item(s)
+                        </p>
+                      </div>
+                      <div className="flex gap-1">
+                        <button onClick={() => setEditingMeal(m)}
+                          className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-600 active:scale-95">✏️</button>
+                        <button onClick={() => deleteMeal(m.id)}
+                          className="rounded-lg bg-rose-50 px-2.5 py-1.5 text-xs font-semibold text-rose-600 active:scale-95">🗑️</button>
+                      </div>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {m.items.map((it) => (
+                        <div key={it.id} className="flex justify-between text-xs">
+                          <span className="text-slate-600">{it.name}{it.multiplier !== 1 ? ` (${it.multiplier}x)` : ''}</span>
+                          <span className="text-slate-400">{it.calories} kcal</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
               </div>
             ))}
           </div>

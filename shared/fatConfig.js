@@ -30,9 +30,13 @@ export function computeFatItem(level, type) {
 
 // Default fat level for a new meal:
 // - AI reported visible fat cues -> normal
-// - else Restaurant -> normal, otherwise light
+// - Restaurant -> normal
+// - Home-cooked -> light
+// - otherwise (raw snack, packaged food, unknown) -> none
+// A raw banana or a granola bar should never get cooking fat added.
 export function defaultFatLevel(visibleFatCues = [], mealSource = null) {
   if (visibleFatCues && visibleFatCues.length > 0) return 'normal';
   if (mealSource === 'Restaurant') return 'normal';
-  return 'light';
+  if (mealSource === 'Home-cooked') return 'light';
+  return 'none';
 }
