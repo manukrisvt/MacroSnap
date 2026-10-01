@@ -3,7 +3,31 @@
 @tailwind utilities;
 
 :root {
-  color-scheme: light;
+  color-scheme: light dark;
+}
+
+/* ── Dark mode global defaults ─────────────────────────────
+   The app was built light-first. Rather than adding dark:
+   variants to 77 class usages, remap the core utility colors
+   when the OS is in dark mode. Tailwind's slate/white palette
+   maps to dark equivalents; brand colors stay.
+   ──────────────────────────────────────────────────────── */
+@media (prefers-color-scheme: dark) {
+  body { background: #0f172a; }
+  body .bg-white { background-color: #1e293b; }
+  body .bg-slate-50 { background-color: #0f172a; }
+  body .bg-slate-100 { background-color: #334155; }
+  body .bg-slate-200 { background-color: #334155; }
+  body .text-slate-900 { color: #f1f5f9; }
+  body .text-slate-800 { color: #e2e8f0; }
+  body .text-slate-700 { color: #cbd5e1; }
+  body .text-slate-600 { color: #94a3b8; }
+  body .text-slate-500 { color: #94a3b8; }
+  body .text-slate-400 { color: #64748b; }
+  body .border-slate-200 { border-color: #334155; }
+  body .border-slate-300 { border-color: #334155; }
+  body .shadow-sm { box-shadow: none; }
+  body .divide-slate-100 > :not([hidden]) ~ :not([hidden]) { border-color: #1e293b; }
 }
 
 html, body, #root {

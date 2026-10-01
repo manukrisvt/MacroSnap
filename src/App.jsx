@@ -11,7 +11,7 @@ const navItems = [
 export default function App({ onLogout }) {
   const loc = useLocation();
   return (
-    <div className="mx-auto flex h-full max-w-md flex-col bg-slate-50">
+    <div className="mx-auto flex h-full max-w-md flex-col bg-slate-50 dark:bg-slate-900">
       <main className="no-scrollbar flex-1 overflow-y-auto pb-24">
         <Outlet key={loc.pathname} />
       </main>
