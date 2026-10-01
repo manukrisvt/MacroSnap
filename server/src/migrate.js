@@ -78,6 +78,13 @@ const MIGRATIONS = [
       ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_sub TEXT;
       CREATE UNIQUE INDEX IF NOT EXISTS idx_users_apple_sub ON users(apple_sub) WHERE apple_sub IS NOT NULL;
     `
+  },
+  {
+    name: '006_apple_users_nullable_password',
+    sql: `
+      -- Apple sign-in accounts have no password; allow NULL pass_hash.
+      ALTER TABLE users ALTER COLUMN pass_hash DROP NOT NULL;
+    `
   }
 ];
 

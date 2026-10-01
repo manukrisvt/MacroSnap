@@ -99,6 +99,11 @@ export async function login(email, password) {
     err.code = 'NOT_FOUND';
     throw err;
   }
+  if (!user.pass_hash) {
+    const err = new Error('This account uses Sign in with Apple. Use the Apple button to log in.');
+    err.code = 'APPLE_ONLY';
+    throw err;
+  }
   if (!verifyPassword(password, user.pass_hash)) {
     const err = new Error('Incorrect password.');
     err.code = 'WRONG_PASSWORD';
@@ -245,7 +250,7 @@ export async function appleSignIn(identityToken) {
       await db.run('UPDATE users SET apple_sub=$1 WHERE id=$2', [appleSub, user.id]);
     } else {
       const r = await db.run(
-        'INSERT INTO users(email, name, apple_sub, created_at) VALUES($1,$2,$3,$4) RETURNING id',
+        'INSERT INTO users(email, name, apple_sub, pass_hash, created_at) VALUES($1,$2,$3,NULL,$4) RETURNING id',
         [email, name, appleSub, Date.now()]
       );
       const userId = r.rows?.[0]?.id || r.lastInsertRowid;
