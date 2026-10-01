@@ -393,30 +393,64 @@ export default function Analyze() {
         </div>
       )}
 
-      {preview && (
+      {preview && !result && !loading && (
         <div className="mt-3">
-          <img src={preview} alt="meal" className="max-h-64 w-full rounded-2xl object-cover" />
-          {/* Phase 2: optional hint + quick source chips */}
-          <input
-            value={hint}
-            onChange={(e) => setHint(e.target.value)}
-            placeholder="Anything the AI should know? (e.g. homemade chicken curry, 2 rotis)"
-            className="mt-2 w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm"
-          />
-          <div className="mt-2 flex gap-2">
-            {['Home-cooked', 'Restaurant', 'Packaged'].map((s) => (
-              <button key={s} onClick={() => setMealSource((cur) => (cur === s ? null : s))}
-                className={`flex-1 rounded-xl py-2 text-xs font-medium ${
-                  mealSource === s ? 'bg-brand-500 text-white' : 'bg-white text-slate-500'
-                }`}>{s}</button>
-            ))}
+          <div className="relative overflow-hidden rounded-3xl">
+            <img src={preview} alt="meal" className="max-h-64 w-full object-cover" />
           </div>
-          {hint && !result && !loading && (
-            <button
-              onClick={() => base64 && analyze(base64)}
-              className="mt-2 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white"
-            >Analyze with this hint</button>
-          )}
+          {/* Phase 2: optional hint + quick source chips */}
+          <div className="mt-3 rounded-2xl bg-white p-3 shadow-sm">
+            <p className="mb-2 text-xs font-semibold text-slate-500">Help the AI (optional)</p>
+            <input
+              value={hint}
+              onChange={(e) => setHint(e.target.value)}
+              placeholder="e.g. homemade chicken curry, 2 rotis"
+              className="w-full rounded-xl bg-slate-50 px-3 py-2.5 text-sm"
+            />
+            <div className="mt-2 flex gap-2">
+              {['Home-cooked', 'Restaurant', 'Packaged'].map((s) => (
+                <button key={s} onClick={() => setMealSource((cur) => (cur === s ? null : s))}
+                  className={`flex-1 rounded-xl py-2 text-xs font-medium transition-colors ${
+                    mealSource === s ? 'bg-brand-500 text-white' : 'bg-slate-50 text-slate-500'
+                  }`}>{s}</button>
+              ))}
+            </div>
+            {hint && (
+              <button
+                onClick={() => base64 && analyze(base64)}
+                className="mt-2 w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white active:scale-[.98]"
+              >Analyze with this hint</button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {preview && result && (
+        <div className="relative mt-3 overflow-hidden rounded-3xl">
+          <img src={preview} alt="meal" className="max-h-44 w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent" />
+          <div className="absolute inset-x-0 bottom-0 flex items-end justify-between p-4">
+            <div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-4xl font-black tracking-tight text-white">{totalCal}</span>
+                <span className="text-sm font-medium text-white/70">kcal</span>
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <OverallConfidence level={result.confidence} />
+                {result.visible_fat_cues?.length > 0 && (
+                  <span className="rounded-full bg-amber-400/90 px-2 py-0.5 text-[10px] font-semibold text-amber-950">oil visible</span>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-1 rounded-full bg-black/40 p-1 backdrop-blur">
+              {MEAL_TYPES.map((m) => (
+                <button key={m} onClick={() => setMealType(m)}
+                  className={`rounded-full px-2.5 py-1 text-[10px] font-semibold capitalize ${
+                    mealType === m ? 'bg-white text-slate-900' : 'text-white/70'
+                  }`}>{m}</button>
+              ))}
+            </div>
+          </div>
         </div>
       )}
 
@@ -472,28 +506,16 @@ export default function Analyze() {
       )}
 
       {result && result.foods.length > 0 && !loading && (
-        <div className="mt-4 space-y-3">
-          <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3">
-            <span className="text-sm text-slate-500">Confidence</span>
-            <OverallConfidence level={result.confidence} />
-          </div>
-
-          {/* Phase 2: visible fat cues from the model */}
-          {result.visible_fat_cues?.length > 0 && (
-            <div className="rounded-xl bg-amber-50 px-4 py-3 text-xs text-amber-800">
-              <span className="font-semibold">Visible fat: </span>
-              {result.visible_fat_cues.join(' · ')}
-            </div>
-          )}
-
-          {/* Phase 2: clarifying question with tappable options */}
+        <div className="mt-3 space-y-3 pb-28">
+          {/* Clarifying question — most important, ask first */}
           {result.clarifying_question && !reanalyzing && (
-            <div className="rounded-2xl bg-white p-4 shadow-sm">
-              <p className="text-sm font-semibold text-slate-800">🤔 {result.clarifying_question.question}</p>
-              <div className="mt-2 flex flex-wrap gap-2">
+            <div className="rounded-2xl bg-brand-500 p-4 text-white shadow-lg shadow-brand-500/25">
+              <p className="text-sm font-semibold">🤔 Quick question</p>
+              <p className="mt-0.5 text-sm text-white/90">{result.clarifying_question.question}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
                 {result.clarifying_question.options.map((opt) => (
                   <button key={opt} onClick={() => answerClarifying(opt)}
-                    className="rounded-full bg-brand-100 px-4 py-2 text-xs font-medium text-brand-700 active:bg-brand-200">
+                    className="rounded-full bg-white px-4 py-2 text-xs font-semibold text-brand-700 active:scale-95">
                     {opt}
                   </button>
                 ))}
@@ -501,12 +523,65 @@ export default function Analyze() {
             </div>
           )}
 
-          {/* Phase 2: "Not right? Tell the AI" */}
+          {/* Recipe match banner */}
+          {recipeApplied && !verified && (
+            <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3 ring-1 ring-emerald-200">
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-emerald-800">🍲 Using your recipe: {recipeApplied.recipe.name}</p>
+                <p className="text-[11px] text-emerald-600">Your macros · fat included</p>
+              </div>
+              <button onClick={undoRecipe}
+                className="ml-2 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                Undo
+              </button>
+            </div>
+          )}
+
+          {/* Items */}
+          {verified ? (
+            <div>
+              <p className="px-1 pb-2 text-xs text-slate-500">
+                Enter each ingredient with its actual weight, including cooking fat as its own item.
+              </p>
+              <MealItemEditor items={gtItems} onChange={setGtItems} />
+            </div>
+          ) : (
+            <div>
+              <MealItemEditor items={result.foods} onChange={setItems} showConfidence />
+              {/* Cooking fat line item */}
+              {fatItem && fatItem.calories > 0 && (
+                <div className="mt-3 flex items-center justify-between rounded-2xl bg-amber-50 px-4 py-3 ring-1 ring-amber-200">
+                  <div>
+                    <p className="text-sm font-semibold text-amber-900">🫕 Cooking fat: {fatItem.type}, {fatItem.level}</p>
+                    <p className="text-[11px] text-amber-600">{fatItem.grams}g · {fatItem.fat_g}g fat</p>
+                  </div>
+                  <span className="text-sm font-bold text-amber-700">+{fatItem.calories} kcal</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Fat selector */}
+          {!verified && fatLevel && !recipeApplied && (
+            <FatSelector level={fatLevel} type={fatType} onLevel={changeFatLevel} onType={changeFatType} />
+          )}
+
+          {/* Verified toggle */}
+          <button
+            onClick={() => { setVerified((v) => !v); if (!verified && gtItems.length === 0) setGtItems([]); }}
+            className={`w-full rounded-2xl px-4 py-3 text-left text-sm font-medium transition-colors ${
+              verified ? 'bg-emerald-500 text-white' : 'bg-white text-slate-600 shadow-sm'
+            }`}
+          >
+            ⚖️ {verified ? 'Verified mode ON — enter what you actually weighed' : 'I weighed this — enter exact amounts'}
+          </button>
+
+          {/* Tell the AI */}
           {!verified && (
             <div className="rounded-2xl bg-white p-3 shadow-sm">
               {!showCorrection ? (
                 <button onClick={() => setShowCorrection(true)}
-                  className="w-full rounded-xl bg-slate-100 py-2.5 text-sm font-medium text-slate-600">
+                  className="w-full rounded-xl bg-slate-50 py-2.5 text-sm font-medium text-slate-600">
                   💬 Not right? Tell the AI
                 </button>
               ) : (
@@ -517,11 +592,11 @@ export default function Analyze() {
                     onChange={(e) => setCorrectionText(e.target.value)}
                     placeholder="e.g. it's sambar not rasam, and there are 3 rotis not 2"
                     rows={2}
-                    className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm"
+                    className="w-full rounded-xl bg-slate-50 px-3 py-2 text-sm"
                   />
                   <div className="flex gap-2">
                     <button onClick={() => { setShowCorrection(false); setCorrectionText(''); }}
-                      className="flex-1 rounded-xl bg-slate-100 py-2 text-sm font-medium text-slate-500">Cancel</button>
+                      className="flex-1 rounded-xl bg-slate-50 py-2 text-sm font-medium text-slate-500">Cancel</button>
                     <button onClick={submitCorrection} disabled={reanalyzing || !correctionText.trim()}
                       className="flex-1 rounded-xl bg-brand-500 py-2 text-sm font-semibold text-white disabled:opacity-60">
                       {reanalyzing ? 'Re-analyzing…' : 'Re-analyze'}
@@ -538,78 +613,15 @@ export default function Analyze() {
             </div>
           )}
 
-          <div className="flex gap-2">
-            {MEAL_TYPES.map((m) => (
-              <button key={m} onClick={() => setMealType(m)}
-                className={`flex-1 rounded-xl py-2 text-xs font-medium capitalize ${
-                  mealType === m ? 'bg-brand-500 text-white' : 'bg-white text-slate-500'
-                }`}>{m}</button>
-            ))}
-          </div>
-
-          {/* Phase 4: recipe match applied — with undo */}
-          {recipeApplied && !verified && (
-            <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3 ring-1 ring-emerald-200">
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-emerald-800">🍲 Using your recipe: {recipeApplied.recipe.name}</p>
-                <p className="text-[11px] text-emerald-600">Recipe macros include cooking fat — fat selector skipped</p>
-              </div>
-              <button onClick={undoRecipe}
-                className="ml-2 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
-                Undo
-              </button>
-            </div>
-          )}
-
-          {/* Phase 3: cooking fat selector — AI excludes cooking fat, this adds it back.
-              Skipped when a recipe is applied (recipe fat is already included). */}
-          {!verified && fatLevel && !recipeApplied && (
-            <FatSelector level={fatLevel} type={fatType} onLevel={changeFatLevel} onType={changeFatType} />
-          )}
-
-          {/* Verified meal toggle — build ground truth */}
-          <button
-            onClick={() => { setVerified((v) => !v); if (!verified && gtItems.length === 0) setGtItems([]); }}
-            className={`w-full rounded-xl px-4 py-3 text-left text-sm font-medium ${
-              verified ? 'bg-emerald-500 text-white' : 'bg-white text-slate-600'
-            }`}
-          >
-            ⚖️ {verified ? 'Verified mode ON — enter what you actually weighed' : 'I weighed this — enter exact amounts'}
-          </button>
-
-          {verified ? (
-            <div>
-              <p className="px-1 text-xs text-slate-500">
-                Enter each ingredient with its actual weight, including cooking fat (oil/ghee/butter) as its own item.
-              </p>
-              <MealItemEditor items={gtItems} onChange={setGtItems} />
-            </div>
-          ) : (
-            <div>
-              <MealItemEditor items={result.foods} onChange={setItems} showConfidence />
-              {/* Cooking fat as its own transparent line item */}
-              {fatItem && fatItem.calories > 0 && (
-                <div className="mt-3 flex items-center justify-between rounded-2xl bg-amber-50 px-4 py-3 ring-1 ring-amber-200">
-                  <div>
-                    <p className="text-sm font-semibold text-amber-900">🫕 Cooking fat: {fatItem.type}, {fatItem.level}</p>
-                    <p className="text-[11px] text-amber-600">{fatItem.grams}g · {fatItem.fat_g}g fat</p>
-                  </div>
-                  <span className="text-sm font-bold text-amber-700">+{fatItem.calories} kcal</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          <div className="mt-2 rounded-2xl bg-slate-900 p-4 text-white shadow-xl">
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-slate-300">Total estimate</span>
-              <span className="text-2xl font-bold">{totalCal} <span className="text-sm font-normal text-slate-400">kcal</span></span>
-            </div>
+          {/* Sticky log bar */}
+          <div className="fixed inset-x-0 bottom-20 z-40 mx-auto max-w-md px-4 pb-[env(safe-area-inset-bottom)]">
             <button
               onClick={logIt}
               disabled={logging}
-              className="mt-3 w-full rounded-xl bg-brand-500 py-3.5 text-base font-semibold active:scale-[.98] disabled:opacity-60"
-            >{logging ? 'Saving…' : 'Log it'}</button>
+              className="w-full rounded-2xl bg-slate-900 py-4 text-base font-bold text-white shadow-2xl shadow-slate-900/30 ring-1 ring-white/10 active:scale-[.98] disabled:opacity-60"
+            >
+              {logging ? 'Saving…' : `Log it · ${totalCal} kcal`}
+            </button>
           </div>
         </div>
       )}

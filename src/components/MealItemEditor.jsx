@@ -105,53 +105,50 @@ export default function MealItemEditor({ items, onChange, showConfidence = false
   return (
     <div className="space-y-3">
       {items.map((f, idx) => (
-        <div key={idx} className={`rounded-2xl bg-white p-4 shadow-sm ${f.confidence === 'low' ? 'ring-2 ring-amber-300' : ''}`}>
-          <div className="flex items-start justify-between gap-2">
+        <div key={idx} className={`overflow-hidden rounded-2xl bg-white shadow-sm ${f.confidence === 'low' ? 'ring-2 ring-amber-300' : ''}`}>
+          <div className="flex items-center gap-2 px-3 pt-3">
             <button
               onClick={() => { setSearchFor(idx); setQuery(''); }}
-              className="flex-1 rounded-lg border border-slate-200 px-2 py-1 text-left text-base font-semibold text-slate-800"
+              className="flex-1 truncate rounded-lg bg-slate-50 px-3 py-2 text-left text-sm font-semibold text-slate-800"
             >
               {f.name}
               <span className="ml-1 text-xs text-brand-500">⇄</span>
             </button>
-            <button onClick={() => deleteItem(idx)} className="rounded-lg p-2 text-slate-400 active:bg-slate-100">
+            {showConfidence && f.confidence && (
+              <ConfidenceBadge level={f.confidence} />
+            )}
+            <button onClick={() => deleteItem(idx)} className="rounded-lg p-2 text-slate-300 active:bg-slate-50">
               <TrashIcon />
             </button>
           </div>
 
-          <div className="mt-1 flex items-center gap-2">
-            <p className="flex-1 text-xs text-slate-400">{f.portion || 'portion estimate'}</p>
-            {showConfidence && f.confidence && (
-              <ConfidenceBadge level={f.confidence} />
-            )}
-          </div>
-
           {f.confidence === 'low' && (
-            <p className="mt-1 text-[11px] font-medium text-amber-600">⚠️ Low confidence — double-check this item</p>
+            <p className="px-3 pt-1 text-[11px] font-medium text-amber-600">⚠️ Low confidence — double-check</p>
           )}
 
-          <div className="mt-2 flex items-center gap-2">
-            <input
-              type="number"
-              inputMode="decimal"
-              placeholder="grams"
-              value={f.grams ?? ''}
-              onChange={(e) => update(idx, { grams: e.target.value === '' ? null : Number(e.target.value) })}
-              className="w-24 rounded-lg border border-slate-200 px-2 py-1.5 text-sm"
-            />
-            <span className="text-xs text-slate-400">g</span>
+          <div className="mt-2 flex items-center gap-2 px-3">
+            <div className="flex items-center gap-1 rounded-lg bg-slate-50 px-2 py-1.5">
+              <input
+                type="number"
+                inputMode="decimal"
+                placeholder="—"
+                value={f.grams ?? ''}
+                onChange={(e) => update(idx, { grams: e.target.value === '' ? null : Number(e.target.value) })}
+                className="w-16 bg-transparent text-center text-sm font-semibold text-slate-800 outline-none"
+              />
+              <span className="text-xs text-slate-400">g</span>
+            </div>
+            <div className="flex flex-1 gap-1">
+              {MULTIPLIERS.map((m) => (
+                <button key={m} onClick={() => update(idx, { multiplier: m })}
+                  className={`flex-1 rounded-lg py-1.5 text-xs font-semibold transition-colors ${
+                    (f.multiplier || 1) === m ? 'bg-brand-500 text-white' : 'bg-slate-50 text-slate-400'
+                  }`}>{m}x</button>
+              ))}
+            </div>
           </div>
 
-          <div className="mt-3 flex gap-1.5">
-            {MULTIPLIERS.map((m) => (
-              <button key={m} onClick={() => update(idx, { multiplier: m })}
-                className={`flex-1 rounded-lg py-1.5 text-xs font-semibold ${
-                  (f.multiplier || 1) === m ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-500'
-                }`}>{m}x</button>
-            ))}
-          </div>
-
-          <div className="mt-3 grid grid-cols-5 gap-1 text-center">
+          <div className="mt-2 grid grid-cols-5 gap-1 px-3 pb-3 text-center">
             <Macro label="kcal" value={scaledCalories(f)} />
             <Macro label="P" value={scaledMacro(f, 'protein_g')} color="text-rose-500" />
             <Macro label="C" value={scaledMacro(f, 'carbs_g')} color="text-amber-500" />
@@ -212,14 +209,14 @@ function Macro({ label, value, color = 'text-slate-800' }) {
   return (
     <div className="rounded-lg bg-slate-50 py-1.5">
       <div className={`text-sm font-bold ${color}`}>{value}</div>
-      <div className="text-[9px] uppercase text-slate-400">{label}</div>
+      <div className="text-[9px] uppercase tracking-wide text-slate-400">{label}</div>
     </div>
   );
 }
 
 function ConfidenceBadge({ level }) {
   const map = { low: 'bg-rose-100 text-rose-700', medium: 'bg-amber-100 text-amber-700', high: 'bg-emerald-100 text-emerald-700' };
-  return <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${map[level] || map.low}`}>{level}</span>;
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${map[level] || map.low}`}>{level}</span>;
 }
 
 function TrashIcon() {
