@@ -125,6 +125,9 @@ export default function Settings() {
         <h2 className="text-sm font-semibold text-slate-700">Plan</h2>
         <div className="mt-2 space-y-2">
           <PlanRow icon="🔑" label="BYO API Key" value={byoActive ? `Active · ${byoSnaps} snaps used · Unlimited` : 'Not set up'} active={byoActive} />
+          {byoActive && (
+            <p className="px-3 text-[11px] text-slate-400">Key is stored on this device only — add it separately on other devices.</p>
+          )}
           <PlanRow icon="📸" label="Cloud Snaps"
             value={profile?.plan === 'plus' ? 'Plus · 500/month'
               : profile?.plan === 'basic' ? 'Basic · 90/month'
@@ -386,6 +389,10 @@ function AIProviderSection({ ai, setAI, saved, setSaved }) {
               <a href={provider.helpUrl} target="_blank" rel="noopener noreferrer"
                 className="mt-1 block text-[11px] text-brand-600">Get a key →</a>
             )}
+            <p className="mt-1.5 text-[11px] leading-snug text-slate-400">
+              🔒 Stored only on this device — your key never touches our servers.
+              Add it separately on each device you use.
+            </p>
           </div>
           {provider.models.length > 0 ? (
             <div>
