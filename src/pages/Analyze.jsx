@@ -4,7 +4,7 @@ import { Capacitor } from '@capacitor/core';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
 import { api } from '../lib/api.js';
 import { compressImage, makeThumbnail, MEAL_TYPES, guessMealType, todayStr } from '../lib/image.js';
-import { getAISettings } from '../lib/aiSettings.js';
+import { getAISettings, incrementBYOSnapCount } from '../lib/aiSettings.js';
 import { analyzeMealImageDirect } from '../lib/clientAI.js';
 import { getRandomFunnyMessage } from '../lib/funnyMessages.js';
 import Header from '../components/Header.jsx';
@@ -113,6 +113,7 @@ export default function Analyze() {
         // Use the ORIGINAL data URL (correct MIME) — Gemini rejects mismatched types.
         const dataUrl = `data:${base64Mime};base64,${b64}`;
         r = await analyzeMealImageDirect(dataUrl, aiSettings, context);
+        incrementBYOSnapCount(); // local counter for Settings display
       } else {
         // Server mode — use cloud backend's API key (quota limited)
         r = await api.analyze(b64, base64Mime, context);

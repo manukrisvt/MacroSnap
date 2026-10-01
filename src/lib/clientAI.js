@@ -15,6 +15,47 @@ function stripJson(text) {
   return t;
 }
 
+// Text-only key test — validates auth + model WITHOUT an image.
+// (The old 1x1 test image was rejected by Gemini's inline_data validation
+// with a 400 even when the key was perfectly valid.)
+export async function testBYOKey(settings) {
+  const byoBaseUrl = (settings.byoBaseUrl || '').trim();
+  const byoApiKey = (settings.byoApiKey || '').trim();
+  const byoModel = (settings.byoModel || '').trim();
+  if (!byoApiKey) {
+    const err = new Error('No API key set.');
+    err.code = 'NO_API_KEY';
+    throw err;
+  }
+  const res = await fetch(`${byoBaseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${byoApiKey}`,
+      'HTTP-Referer': 'https://macrosnap.app',
+      'X-Title': 'MacroSnap'
+    },
+    body: JSON.stringify({
+      model: byoModel,
+      messages: [{ role: 'user', content: 'Reply with exactly: OK' }],
+      max_tokens: 5
+    })
+  });
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '');
+    const err = new Error(`AI provider error ${res.status}: ${txt.slice(0, 200)}`);
+    err.code = 'API_ERROR';
+    err.status = res.status;
+    if (res.status === 401) {
+      err.message = '401: key rejected. Check it is from the SELECTED provider (sk-or-v1-… = OpenRouter, sk-… = OpenAI, AIza… = Google with Custom provider).';
+    } else if (res.status === 404) {
+      err.message = '404: model not found. Pick a different model for this provider.';
+    }
+    throw err;
+  }
+  return true;
+}
+
 export async function analyzeMealImageDirect(dataUrl, settings, context = {}) {
   const byoBaseUrl = (settings.byoBaseUrl || '').trim();
   const byoApiKey = (settings.byoApiKey || '').trim();

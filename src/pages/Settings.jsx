@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api, logout } from '../lib/api.js';
 import { todayStr, formatDate } from '../lib/image.js';
-import { getAISettings, saveAISettings, PROVIDERS } from '../lib/aiSettings.js';
-import { analyzeMealImageDirect } from '../lib/clientAI.js';
+import { getAISettings, saveAISettings, PROVIDERS, getBYOSnapCount } from '../lib/aiSettings.js';
+import { analyzeMealImageDirect, testBYOKey } from '../lib/clientAI.js';
 import Header from '../components/Header.jsx';
 
 export default function Settings() {
@@ -13,6 +13,7 @@ export default function Settings() {
   const [ai, setAI] = useState(null);
   const [aiSaved, setAISaved] = useState(false);
   const [profile, setProfile] = useState(null);
+  const [byoSnaps, setByoSnaps] = useState(0);
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [feedbackStatus, setFeedbackStatus] = useState(null);
 
@@ -21,6 +22,7 @@ export default function Settings() {
     api.weight().then(setWeightLog);
     getAISettings().then(setAI);
     api.me().then(setProfile).catch(() => {});
+    getBYOSnapCount().then(setByoSnaps);
   }, []);
 
   function update(k, v) { setS((p) => ({ ...p, [k]: v })); }
@@ -102,7 +104,7 @@ export default function Settings() {
       <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-700">Plan</h2>
         <div className="mt-2 space-y-2">
-          <PlanRow icon="🔑" label="BYO API Key" value={byoActive ? 'Active · Unlimited' : 'Not set up'} active={byoActive} />
+          <PlanRow icon="🔑" label="BYO API Key" value={byoActive ? `Active · ${byoSnaps} snaps used · Unlimited` : 'Not set up'} active={byoActive} />
           <PlanRow icon="⭐" label="Premium" value={profile?.isPremium ? 'Active' : 'Not subscribed'} active={profile?.isPremium} />
           <PlanRow icon="📸" label="Cloud Snaps" value={profile?.isPremium ? 'Unlimited' : `${profile?.quota?.remaining || 0}/${profile?.quota?.limit || 3} left`} active={!profile?.isPremium} />
         </div>
@@ -326,22 +328,13 @@ function AIProviderSection({ ai, setAI, saved, setSaved }) {
             const btn = document.getElementById('test-key-result');
             if (btn) btn.textContent = 'Testing…';
             try {
-              // Send a tiny test request to verify the key works
-              const testUrl = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEAYABgAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjL/wAARAAEAAQADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQRBRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RFRkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ipqrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAHwEAAwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtREAAgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYkNOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOEhYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwD3+iiigD//2Q=';
-              await analyzeMealImageDirect(testUrl, ai);
+              // Text-only test: validates key + model without any image
+              // (tiny test images get 400-rejected by some providers).
+              await testBYOKey(ai);
               if (btn) btn.textContent = '✅ Key works! Ready to snap.';
               if (btn) btn.className = 'mt-2 text-xs text-brand-600';
             } catch (e) {
-              let msg = e.message || 'Key test failed';
-              if (e.status === 401) {
-                msg = '401: key rejected. Check it is from the SELECTED provider (sk-or-v1-… = OpenRouter, sk-… = OpenAI, AIza… = Google with Custom provider).';
-              } else if (e.status === 404) {
-                msg = '404: model not found. Pick a different model for this provider.';
-              } else if (e.code === 'BAD_JSON' || e.code === 'BAD_SCHEMA') {
-                // Key itself works — the tiny test image just confused the model.
-                msg = '✅ Key works (auth OK) — model responded. Ready to snap.';
-              }
-              if (btn) btn.textContent = '❌ ' + msg;
+              if (btn) btn.textContent = '❌ ' + (e.message || 'Key test failed');
               if (btn) btn.className = 'mt-2 text-xs text-rose-500';
             }
           }}

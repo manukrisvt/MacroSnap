@@ -36,6 +36,19 @@ export async function isBYO() {
   return value === 'byo';
 }
 
+// Local BYO snap counter — BYO calls go device→provider directly, so the
+// server never sees them. Counted on-device for the Settings display.
+export async function getBYOSnapCount() {
+  const { value } = await Preferences.get({ key: 'byo_snap_count' });
+  return Number(value) || 0;
+}
+
+export async function incrementBYOSnapCount() {
+  const n = (await getBYOSnapCount()) + 1;
+  await Preferences.set({ key: 'byo_snap_count', value: String(n) });
+  return n;
+}
+
 // List of popular providers for the settings dropdown
 export const PROVIDERS = [
   {
