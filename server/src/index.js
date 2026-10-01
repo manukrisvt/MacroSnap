@@ -6,7 +6,7 @@ import { dirname, resolve } from 'path';
 import { existsSync } from 'fs';
 import { db, getAllSettings, setSetting } from './db.js';
 import { analyzeMealImage } from './moonshot.js';
-import { signup, login, authMiddleware, requireAuth, checkQuota, logSnap, deleteAccount, adminResetPassword, rateLimit } from './auth.js';
+import { signup, login, authMiddleware, requireAuth, checkQuota, logSnap, deleteAccount, adminResetPassword, rateLimit, appleSignIn } from './auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -39,6 +39,19 @@ app.post('/api/login', rateLimit(), async (req, res) => {
     const { userId, token } = await login(email, password);
     res.json({ userId, token, email });
   } catch (err) { res.status(401).json({ error: err.message }); }
+});
+
+// ---------- Sign in with Apple ----------
+app.post('/api/auth/apple', rateLimit(), async (req, res) => {
+  try {
+    const { identityToken } = req.body || {};
+    if (!identityToken) return res.status(400).json({ error: 'identityToken required.' });
+    const { userId, token, email } = await appleSignIn(identityToken);
+    res.json({ userId, token, email });
+  } catch (err) {
+    console.error('[apple-signin] error:', err.message);
+    res.status(401).json({ error: err.message });
+  }
 });
 
 // ---------- admin password reset (beta — no email needed) ----------

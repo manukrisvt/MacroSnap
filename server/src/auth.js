@@ -138,6 +138,116 @@ export async function deleteAccount(userId) {
   await db.run('DELETE FROM users WHERE id=$1', [userId]);
 }
 
+// ---- Sign in with Apple ----
+// Verifies Apple's identity token (a signed JWT) using Apple's public keys,
+// then creates/links the account. No external JWT library needed — we verify
+// the RS256 signature manually with Apple's JWKS.
+
+const APPLE_JWKS_URL = 'https://appleid.apple.com/auth/keys';
+let appleKeysCache = null;
+let appleKeysCacheTime = 0;
+
+async function getApplePublicKeys() {
+  // Cache keys for 1 hour
+  if (appleKeysCache && Date.now() - appleKeysCacheTime < 3600_000) {
+    return appleKeysCache;
+  }
+  const res = await fetch(APPLE_JWKS_URL);
+  if (!res.ok) throw new Error('Could not fetch Apple keys.');
+  const data = await res.json();
+  appleKeysCache = data.keys;
+  appleKeysCacheTime = Date.now();
+  return appleKeysCache;
+}
+
+function base64UrlDecode(str) {
+  return Buffer.from(str.replace(/-/g, '+').replace(/_/g, '/'), 'base64');
+}
+
+async function verifyAppleIdentityToken(idToken) {
+  const parts = idToken.split('.');
+  if (parts.length !== 3) return null;
+  const [headerB64, payloadB64, sigB64] = parts;
+
+  let header, payload;
+  try {
+    header = JSON.parse(base64UrlDecode(headerB64).toString('utf8'));
+    payload = JSON.parse(base64UrlDecode(payloadB64).toString('utf8'));
+  } catch { return null; }
+
+  if (header.alg !== 'RS256') return null;
+
+  // Verify audience matches our bundle ID
+  const expectedAud = process.env.APPLE_BUNDLE_ID || 'com.macrosnap.app';
+  if (payload.aud !== expectedAud) return null;
+  // Verify issuer
+  if (payload.iss !== 'https://appleid.apple.com') return null;
+  // Verify expiry (60s clock skew tolerance)
+  if (!payload.exp || (payload.exp + 60) * 1000 < Date.now()) return null;
+
+  // Find the matching key and verify signature
+  const keys = await getApplePublicKeys();
+  const key = keys.find((k) => k.kid === header.kid);
+  if (!key) {
+    // Key may have rotated — bust cache and retry once
+    appleKeysCache = null;
+    const freshKeys = await getApplePublicKeys();
+    const freshKey = freshKeys.find((k) => k.kid === header.kid);
+    if (!freshKey) return null;
+    return verifyWithKey(freshKey, headerB64, payloadB64, sigB64, payload);
+  }
+  return verifyWithKey(key, headerB64, payloadB64, sigB64, payload);
+}
+
+async function verifyWithKey(jwk, headerB64, payloadB64, sigB64, payload) {
+  // Build RSA public key from JWK components (n, e)
+  const modulus = base64UrlDecode(jwk.n);
+  const exponent = base64UrlDecode(jwk.e).readUInt32BE(0) === 0x10001
+    ? base64UrlDecode(jwk.e).subarray(1)
+    : base64UrlDecode(jwk.e);
+  const jwkKey = crypto.createPublicKey({ key: { kty: 'RSA', n: jwk.n, e: jwk.e }, format: 'jwk' });
+  const signedContent = Buffer.from(`${headerB64}.${payloadB64}`);
+  const signature = base64UrlDecode(sigB64);
+  const valid = crypto.verify('RSA-SHA256', signedContent, jwkKey, signature);
+  if (!valid) return null;
+  return payload;
+}
+
+export async function appleSignIn(identityToken) {
+  const payload = await verifyAppleIdentityToken(identityToken);
+  if (!payload || !payload.sub) {
+    const err = new Error('Apple sign-in could not be verified.');
+    err.code = 'APPLE_INVALID';
+    throw err;
+  }
+
+  // Apple user ID is stable per-app; email may be hidden or relayed.
+  // We key the account on apple_sub so repeat sign-ins find the same user.
+  const appleSub = payload.sub;
+  const email = (payload.email || `${appleSub}@privaterelay.appleid.com`).toLowerCase();
+  const name = payload.name?.firstName
+    ? `${payload.name.firstName}${payload.name.lastName ? ' ' + payload.name.lastName : ''}`.trim()
+    : '';
+
+  let user = await db.get('SELECT id FROM users WHERE apple_sub=$1', [appleSub]);
+  if (!user) {
+    // Link to an existing email account if one matches (user signed up before)
+    user = await db.get('SELECT id FROM users WHERE email=$1', [email]);
+    if (user) {
+      await db.run('UPDATE users SET apple_sub=$1 WHERE id=$2', [appleSub, user.id]);
+    } else {
+      const r = await db.run(
+        'INSERT INTO users(email, name, apple_sub, created_at) VALUES($1,$2,$3,$4) RETURNING id',
+        [email, name, appleSub, Date.now()]
+      );
+      const userId = r.rows?.[0]?.id || r.lastInsertRowid;
+      await seedUserSettings(userId);
+      user = { id: userId };
+    }
+  }
+  return { userId: user.id, token: createToken(user.id), email };
+}
+
 // ---- Middleware ----
 export function authMiddleware(req, res, next) {
   const auth = req.headers.authorization;

@@ -121,5 +121,8 @@ export const api = {
   // Subscriptions
   plan: () => req('/plan'),
   plans: () => req('/plans'),
-  startCheckout: (planId) => req('/checkout', { method: 'POST', body: JSON.stringify({ planId }) })
+  startCheckout: (planId) => req('/checkout', { method: 'POST', body: JSON.stringify({ planId }) }),
+
+  // Sign in with Apple
+  appleSignIn: (identityToken) => req('/auth/apple', { method: 'POST', body: JSON.stringify({ identityToken }) })
 };

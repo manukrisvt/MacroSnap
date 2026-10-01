@@ -71,6 +71,13 @@ const MIGRATIONS = [
       UPDATE users SET plan='plus' WHERE is_premium=1;
       CREATE INDEX IF NOT EXISTS idx_usage_month ON usage_log(user_id, endpoint, created_at);
     `
+  },
+  {
+    name: '005_sign_in_with_apple',
+    sql: `
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS apple_sub TEXT;
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_users_apple_sub ON users(apple_sub) WHERE apple_sub IS NOT NULL;
+    `
   }
 ];
 
