@@ -14,6 +14,10 @@ import { computeFatItem, defaultFatLevel } from '../../shared/fatConfig.js';
 import { matchRecipe, scaleRecipeToGrams } from '../../shared/recipeLogic.js';
 
 const isNative = Capacitor.isNativePlatform();
+// App Store builds: no purchase path in-app (Apple IAP rules).
+// Users who want a paid plan upgrade via the website; the same account
+// picks up the plan automatically.
+const isIOSApp = isNative && Capacitor.getPlatform() === 'ios';
 
 export default function Analyze() {
   const navigate = useNavigate();
@@ -494,30 +498,45 @@ export default function Analyze() {
             </p>
           </div>
           <div className="mt-5 space-y-3">
-            <button
-              onClick={() => startCheckout('basic')}
-              className="flex w-full items-center justify-between rounded-xl bg-brand-500 px-4 py-3 text-left active:scale-[.98]"
-            >
-              <div>
-                <p className="font-semibold">Basic</p>
-                <p className="text-xs text-white/80">90 snaps / month (~3 a day)</p>
+            {isIOSApp ? (
+              <div className="rounded-xl border border-slate-700 bg-slate-800 p-4 text-center">
+                <p className="text-sm font-semibold text-slate-200">Want more snaps?</p>
+                <p className="mt-1 text-xs text-slate-400">
+                  Sign in to your MacroSnap account on the web to choose a plan —
+                  it applies here automatically.
+                </p>
+                <p className="mt-2 text-xs text-slate-500">
+                  Or add your own AI key in Settings for unlimited free snaps.
+                </p>
               </div>
-              <p className="text-lg font-bold">$1.99<span className="text-xs font-normal text-white/80">/mo</span></p>
-            </button>
-            <button
-              onClick={() => startCheckout('plus')}
-              className="flex w-full items-center justify-between rounded-xl bg-emerald-500 px-4 py-3 text-left active:scale-[.98]"
-            >
-              <div>
-                <p className="font-semibold">Plus</p>
-                <p className="text-xs text-white/80">500 snaps / month — for power users</p>
-              </div>
-              <p className="text-lg font-bold">$8.99<span className="text-xs font-normal text-white/80">/mo</span></p>
-            </button>
-            <Link to="/settings"
-              className="block rounded-xl border border-slate-700 py-3 text-center text-sm font-medium text-slate-300">
-              🔑 Or bring your own API key (free, unlimited)
-            </Link>
+            ) : (
+              <>
+                <button
+                  onClick={() => startCheckout('basic')}
+                  className="flex w-full items-center justify-between rounded-xl bg-brand-500 px-4 py-3 text-left active:scale-[.98]"
+                >
+                  <div>
+                    <p className="font-semibold">Basic</p>
+                    <p className="text-xs text-white/80">90 snaps / month (~3 a day)</p>
+                  </div>
+                  <p className="text-lg font-bold">$1.99<span className="text-xs font-normal text-white/80">/mo</span></p>
+                </button>
+                <button
+                  onClick={() => startCheckout('plus')}
+                  className="flex w-full items-center justify-between rounded-xl bg-emerald-500 px-4 py-3 text-left active:scale-[.98]"
+                >
+                  <div>
+                    <p className="font-semibold">Plus</p>
+                    <p className="text-xs text-white/80">500 snaps / month — for power users</p>
+                  </div>
+                  <p className="text-lg font-bold">$8.99<span className="text-xs font-normal text-white/80">/mo</span></p>
+                </button>
+                <Link to="/settings"
+                  className="block rounded-xl border border-slate-700 py-3 text-center text-sm font-medium text-slate-300">
+                  🔑 Or bring your own API key (free, unlimited)
+                </Link>
+              </>
+            )}
           </div>
           <button
             onClick={() => navigate('/manual')}
@@ -533,7 +552,7 @@ export default function Analyze() {
       {quotaInfo && !quotaInfo.isPremium && quotaInfo.remaining > 0 && !quotaExceeded && !loading && (
         <div className="mt-2 flex items-center justify-between rounded-xl bg-slate-100 px-4 py-2 text-xs text-slate-500">
           <span>📸 Free snaps used: {quotaInfo.used}/{quotaInfo.limit}</span>
-          <Link to="/settings" className="font-medium text-brand-600">Go unlimited →</Link>
+          <Link to="/settings" className="font-medium text-brand-600">{isIOSApp ? 'Use your own AI key →' : 'Go unlimited →'}</Link>
         </div>
       )}
 

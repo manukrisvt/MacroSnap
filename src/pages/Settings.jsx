@@ -1,9 +1,13 @@
 import { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { api, logout } from '../lib/api.js';
 import { todayStr, formatDate } from '../lib/image.js';
 import { getAISettings, saveAISettings, PROVIDERS, getBYOSnapCount } from '../lib/aiSettings.js';
 import { analyzeMealImageDirect, testBYOKey } from '../lib/clientAI.js';
 import Header from '../components/Header.jsx';
+
+// App Store builds: no purchase path in-app (Apple IAP rules).
+const isIOSApp = Capacitor.isNativePlatform() && Capacitor.getPlatform() === 'ios';
 
 export default function Settings() {
   const [s, setS] = useState({});
@@ -129,7 +133,13 @@ export default function Settings() {
         </div>
 
         {/* Upgrade options */}
-        {(!profile?.plan || profile?.plan === 'free') && (
+        {isIOSApp && (!profile?.plan || profile?.plan === 'free') && (
+          <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
+            To choose a plan, sign in to your MacroSnap account on the web — it applies here automatically.
+            Or add your own AI key below for unlimited free snaps.
+          </p>
+        )}
+        {!isIOSApp && (!profile?.plan || profile?.plan === 'free') && (
           <div className="mt-3 space-y-2">
             <button onClick={() => startCheckout('basic')}
               className="flex w-full items-center justify-between rounded-xl bg-amber-500 px-4 py-3 text-left text-white active:scale-[.98]">
