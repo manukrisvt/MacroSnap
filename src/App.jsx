@@ -15,7 +15,7 @@ export default function App({ onLogout }) {
       <main className="no-scrollbar flex-1 overflow-y-auto pb-24">
         <Outlet key={loc.pathname} />
       </main>
-      <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md border-t border-slate-200 bg-white/95 backdrop-blur pb-[env(safe-area-inset-bottom)]">
+      <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-md border-t border-slate-200 bg-white/95 backdrop-blur pb-[env(safe-area-inset-bottom)] dark:border-slate-800 dark:bg-slate-900/95">
         <div className="flex items-stretch justify-around px-2 pt-1.5">
           {navItems.map((item) => {
             const Icon = item.icon;
