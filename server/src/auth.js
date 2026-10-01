@@ -160,7 +160,7 @@ export function requireAuth(req, res, next) {
 }
 
 // ---- Quota ----
-import { getPlan, monthStart } from '../shared/plans.js';
+import { getPlan, monthStart } from '../../shared/plans.js';
 
 export async function isPremium(userId) {
   const row = await db.get('SELECT plan FROM users WHERE id=$1', [userId]);

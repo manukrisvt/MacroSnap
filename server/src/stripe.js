@@ -4,7 +4,7 @@
 // image lean and avoids a native-build step).
 
 import { db } from './db.js';
-import { PLANS } from '../shared/plans.js';
+import { PLANS } from '../../shared/plans.js';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 
