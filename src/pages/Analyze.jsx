@@ -11,6 +11,7 @@ import Header from '../components/Header.jsx';
 import MealItemEditor from '../components/MealItemEditor.jsx';
 import FatSelector from '../components/FatSelector.jsx';
 import { computeFatItem, defaultFatLevel } from '../../shared/fatConfig.js';
+import { matchRecipe, scaleRecipeToGrams } from '../../shared/recipeLogic.js';
 
 const isNative = Capacitor.isNativePlatform();
 
@@ -47,6 +48,9 @@ export default function Analyze() {
   // Phase 3: cooking fat selector
   const [fatLevel, setFatLevel] = useState(null); // null = not yet set for this meal
   const [fatType, setFatType] = useState('oil');
+  // Phase 4: recipe matching
+  const [recipeApplied, setRecipeApplied] = useState(null); // { itemIdx, recipe, original }
+  const [recipes, setRecipes] = useState([]);
 
   async function handleDataUrl(dataUrl) {
     // Preserve the original MIME (Capacitor may return image/png or heic) —
@@ -127,6 +131,23 @@ export default function Analyze() {
       rawResultRef.current = { ...r, foods: (r.foods || []).map((f) => ({ ...f })) };
       const foods = (r.foods || []).map((f) => ({ ...f, multiplier: 1 }));
       setResult({ foods, total_calories: r.total_calories, confidence: r.confidence, visible_fat_cues: r.visible_fat_cues || [], clarifying_question: r.clarifying_question || null });
+      setRecipeApplied(null);
+      // Phase 4: fuzzy-match items against the user's recipes
+      try {
+        const userRecipes = await api.recipes();
+        setRecipes(userRecipes);
+        if (userRecipes.length > 0) {
+          const m = matchRecipe(foods[0]?.name || '', userRecipes);
+          if (m && foods.length > 0) {
+            const scaled = scaleRecipeToGrams(m.recipe, foods[0].grams || 150);
+            setRecipeApplied({ itemIdx: 0, recipe: m.recipe, original: foods[0], scaled, score: m.score });
+            setResult((prev) => ({
+              ...prev,
+              foods: prev.foods.map((f, i) => (i === 0 ? scaled : f))
+            }));
+          }
+        }
+      } catch { /* recipes unavailable — skip matching */ }
       // Phase 3: default fat level — cues -> normal; Restaurant -> normal; else light.
       // Remembered last choice per meal category takes precedence.
       const remembered = getRememberedFat(mealType);
@@ -188,8 +209,19 @@ export default function Analyze() {
     rememberFat(mealType, fatLevel, type);
   }
 
+  // Phase 4: undo a recipe match — restore the original AI item
+  function undoRecipe() {
+    if (!recipeApplied) return;
+    setResult((prev) => ({
+      ...prev,
+      foods: prev.foods.map((f, i) => (i === recipeApplied.itemIdx ? { ...recipeApplied.original, multiplier: 1 } : f))
+    }));
+    setRecipeApplied(null);
+  }
+
   // The cooking fat is a real, visible, editable line item in the list.
-  const fatItem = fatLevel ? computeFatItem(fatLevel, fatType) : null;
+  // Skipped when a recipe is applied (recipe macros already include fat).
+  const fatItem = fatLevel && !recipeApplied ? computeFatItem(fatLevel, fatType) : null;
   const displayItems = verified
     ? gtItems
     : fatItem ? [...(result?.foods || []), fatItem] : (result?.foods || []);
@@ -515,8 +547,23 @@ export default function Analyze() {
             ))}
           </div>
 
-          {/* Phase 3: cooking fat selector — AI excludes cooking fat, this adds it back */}
-          {!verified && fatLevel && (
+          {/* Phase 4: recipe match applied — with undo */}
+          {recipeApplied && !verified && (
+            <div className="flex items-center justify-between rounded-2xl bg-emerald-50 px-4 py-3 ring-1 ring-emerald-200">
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-emerald-800">🍲 Using your recipe: {recipeApplied.recipe.name}</p>
+                <p className="text-[11px] text-emerald-600">Recipe macros include cooking fat — fat selector skipped</p>
+              </div>
+              <button onClick={undoRecipe}
+                className="ml-2 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
+                Undo
+              </button>
+            </div>
+          )}
+
+          {/* Phase 3: cooking fat selector — AI excludes cooking fat, this adds it back.
+              Skipped when a recipe is applied (recipe fat is already included). */}
+          {!verified && fatLevel && !recipeApplied && (
             <FatSelector level={fatLevel} type={fatType} onLevel={changeFatLevel} onType={changeFatType} />
           )}
 

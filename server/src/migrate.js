@@ -39,6 +39,27 @@ const MIGRATIONS = [
         created_at    BIGINT NOT NULL
       );
     `
+  {
+    name: '003_user_recipes',
+    sql: `
+      CREATE TABLE IF NOT EXISTS user_recipes (
+        id                  SERIAL PRIMARY KEY,
+        user_id             INTEGER NOT NULL,
+        name                TEXT NOT NULL,
+        aliases             TEXT[] NOT NULL DEFAULT '{}',
+        ingredients         JSONB NOT NULL,
+        total_cooked_yield_g REAL NOT NULL,
+        cooking_fat_g       REAL NOT NULL DEFAULT 0,
+        kcal_per_100g       REAL NOT NULL DEFAULT 0,
+        protein_per_100g    REAL NOT NULL DEFAULT 0,
+        carbs_per_100g      REAL NOT NULL DEFAULT 0,
+        fat_per_100g        REAL NOT NULL DEFAULT 0,
+        fiber_per_100g       REAL NOT NULL DEFAULT 0,
+        created_at          BIGINT NOT NULL,
+        updated_at          BIGINT NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_user_recipes_user ON user_recipes(user_id);
+    `
   }
 ];
 

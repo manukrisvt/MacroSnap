@@ -118,6 +118,9 @@ export default function Settings() {
       {/* ===== AI PROVIDER ===== */}
       {ai && <AIProviderSection ai={ai} setAI={setAI} saved={aiSaved} setSaved={setAISaved} />}
 
+      {/* ===== MY RECIPES (Phase 4) ===== */}
+      <MyRecipesSection />
+
       {/* ===== GOALS ===== */}
       <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
         <h2 className="text-sm font-semibold text-slate-700">Daily calorie goal</h2>
@@ -356,5 +359,152 @@ function MacroInput({ label, value, onChange, unit, color }) {
         className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-center text-sm font-semibold" />
       <div className="mt-0.5 text-[9px] text-slate-400">{unit === 'g' ? 'grams' : '%'}</div>
     </div>
+  );
+}
+
+// ===== MY RECIPES (Phase 4) =====
+function MyRecipesSection() {
+  const [recipes, setRecipes] = useState([]);
+  const [showNew, setShowNew] = useState(false);
+  const [name, setName] = useState('');
+  const [aliases, setAliases] = useState('');
+  const [yieldG, setYieldG] = useState('');
+  const [fatG, setFatG] = useState('');
+  const [ings, setIngs] = useState([]); // [{ name, grams, kcal_per_100g, ... }]
+  const [ingQuery, setIngQuery] = useState('');
+  const [ingResults, setIngResults] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const reload = () => api.recipes().then(setRecipes).catch(() => {});
+  useEffect(() => { reload(); }, []);
+
+  useEffect(() => {
+    if (!showNew) return;
+    const t = setTimeout(() => { api.foods(ingQuery).then(setIngResults); }, 200);
+    return () => clearTimeout(t);
+  }, [ingQuery, showNew]);
+
+  function addIngredient(f) {
+    // Convert a food (per portion) to per-100g ingredient entry
+    const gpp = f.grams_per_portion || 100;
+    setIngs((p) => [...p, {
+      name: f.name,
+      grams: '',
+      kcal_per_100g: Math.round((f.calories / gpp) * 100),
+      protein_per_100g: Math.round((f.protein_g / gpp) * 100 * 10) / 10,
+      carbs_per_100g: Math.round((f.carbs_g / gpp) * 100 * 10) / 10,
+      fat_per_100g: Math.round((f.fat_g / gpp) * 100 * 10) / 10,
+      fiber_per_100g: Math.round((f.fiber_g / gpp) * 100 * 10) / 10
+    }]);
+    setIngQuery('');
+  }
+
+  async function saveRecipe() {
+    setErr(null);
+    if (!name || !yieldG || ings.length === 0 || ings.some((i) => !Number(i.grams))) {
+      setErr('Need a name, total cooked weight, and grams for every ingredient.');
+      return;
+    }
+    setSaving(true);
+    try {
+      await api.addRecipe({
+        name,
+        aliases: aliases.split(',').map((a) => a.trim()).filter(Boolean),
+        ingredients: ings,
+        total_cooked_yield_g: Number(yieldG),
+        cooking_fat_g: Number(fatG) || 0
+      });
+      setShowNew(false); setName(''); setAliases(''); setYieldG(''); setFatG(''); setIngs([]);
+      reload();
+    } catch (e) {
+      setErr(e.message || 'Failed to save recipe.');
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <section className="mt-3 rounded-2xl bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-base">🍲</span>
+          <h2 className="text-sm font-semibold text-slate-700">My Recipes</h2>
+        </div>
+        <button onClick={() => setShowNew((v) => !v)}
+          className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-semibold text-white">
+          {showNew ? 'Cancel' : '+ New'}
+        </button>
+      </div>
+      <p className="mt-1 text-[11px] text-slate-400">
+        Home-cooked dishes saved with exact ingredients. AI matches them by name and uses YOUR macros.
+      </p>
+
+      {showNew && (
+        <div className="mt-3 space-y-2">
+          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Recipe name (e.g. Chicken curry)"
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+          <input value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="Aliases, comma-separated (e.g. kerala chicken curry, curry)"
+            className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+          <div className="flex gap-2">
+            <input type="number" inputMode="numeric" value={yieldG} onChange={(e) => setYieldG(e.target.value)}
+              placeholder="Total cooked weight (g)" className="flex-1 rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+            <input type="number" inputMode="numeric" value={fatG} onChange={(e) => setFatG(e.target.value)}
+              placeholder="Cooking fat (g)" className="w-36 rounded-xl border border-slate-200 px-3 py-2.5 text-sm" />
+          </div>
+
+          <div className="rounded-xl bg-slate-50 p-2">
+            <p className="text-xs font-medium text-slate-600">Ingredients</p>
+            {ings.map((ing, i) => (
+              <div key={i} className="mt-1 flex items-center gap-2">
+                <span className="flex-1 truncate text-xs text-slate-700">{ing.name}</span>
+                <input type="number" inputMode="numeric" value={ing.grams}
+                  onChange={(e) => setIngs((p) => p.map((x, j) => (j === i ? { ...x, grams: e.target.value } : x)))}
+                  placeholder="g" className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-center text-xs" />
+                <span className="text-[10px] text-slate-400">{ing.kcal_per_100g} kcal/100g</span>
+                <button onClick={() => setIngs((p) => p.filter((_, j) => j !== i))} className="text-slate-300">✕</button>
+              </div>
+            ))}
+            <input value={ingQuery} onChange={(e) => setIngQuery(e.target.value)}
+              placeholder="Search foods to add…"
+              className="mt-1 w-full rounded-lg border border-slate-200 px-2 py-2 text-xs" />
+            {ingQuery && (
+              <div className="mt-1 max-h-32 space-y-1 overflow-y-auto">
+                {ingResults.map((f) => (
+                  <button key={f.id} onClick={() => addIngredient(f)}
+                    className="flex w-full items-center justify-between rounded-lg bg-white px-2 py-1.5 text-left text-xs shadow-sm">
+                    <span>{f.name}</span>
+                    <span className="text-brand-500">+</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {err && <p className="text-xs text-rose-500">{err}</p>}
+          <button onClick={saveRecipe} disabled={saving}
+            className="w-full rounded-xl bg-slate-900 py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+            {saving ? 'Saving…' : 'Save recipe'}
+          </button>
+        </div>
+      )}
+
+      {recipes.length > 0 && (
+        <div className="mt-3 space-y-1">
+          {recipes.map((r) => (
+            <div key={r.id} className="flex items-center justify-between rounded-xl bg-slate-50 px-3 py-2">
+              <div>
+                <p className="text-sm font-medium text-slate-800">{r.name}</p>
+                <p className="text-[11px] text-slate-400">
+                  {Math.round(r.kcal_per_100g)} kcal/100g · P {r.protein_per_100g} · C {r.carbs_per_100g} · F {r.fat_per_100g}
+                </p>
+              </div>
+              <button onClick={async () => { await api.deleteRecipe(r.id); reload(); }}
+                className="text-slate-300">✕</button>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
   );
 }

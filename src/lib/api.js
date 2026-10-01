@@ -109,5 +109,12 @@ export const api = {
   logWeight: (date, weight_kg) =>
     req('/weight', { method: 'POST', body: JSON.stringify({ date, weight_kg }) }),
 
-  recent: (limit = 20) => req(`/recent?limit=${limit}`)
+  recent: (limit = 20) => req(`/recent?limit=${limit}`),
+
+  // Phase 4: household recipes
+  recipes: () => req('/recipes'),
+  addRecipe: (r) => req('/recipes', { method: 'POST', body: JSON.stringify(r) }),
+  updateRecipe: (id, r) => req(`/recipes/${id}`, { method: 'PUT', body: JSON.stringify(r) }),
+  deleteRecipe: (id) => req(`/recipes/${id}`, { method: 'DELETE' }),
+  matchRecipes: (itemNames) => req('/recipes/match', { method: 'POST', body: JSON.stringify({ itemNames }) })
 };

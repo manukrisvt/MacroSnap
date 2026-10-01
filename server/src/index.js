@@ -359,6 +359,82 @@ app.delete('/api/meals/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
+// ---------- user recipes (Phase 4) ----------
+import { computeRecipeMacros, matchRecipe } from '../../shared/recipeLogic.js';
+
+app.get('/api/recipes', async (req, res) => {
+  const rows = await db.all('SELECT * FROM user_recipes WHERE user_id=$1 ORDER BY updated_at DESC', [req.userId]);
+  res.json(rows);
+});
+
+app.post('/api/recipes', async (req, res) => {
+  const { name, aliases, ingredients, total_cooked_yield_g, cooking_fat_g } = req.body || {};
+  if (!name || !Array.isArray(ingredients) || ingredients.length === 0 || !Number(total_cooked_yield_g)) {
+    return res.status(400).json({ error: 'name, ingredients, and total_cooked_yield_g are required.' });
+  }
+  // Cooking fat is just an ingredient like any other — caller includes it in
+  // ingredients (or as cooking_fat_g, which we convert to an ingredient).
+  let ings = ingredients;
+  const fatG = Number(cooking_fat_g) || 0;
+  if (fatG > 0 && !ings.some((i) => i.is_cooking_fat)) {
+    ings = [...ings, { name: 'cooking fat', grams: fatG, kcal_per_100g: 900, protein_per_100g: 0, carbs_per_100g: 0, fat_per_100g: 100, fiber_per_100g: 0, is_cooking_fat: true }];
+  }
+  let macros;
+  try {
+    macros = computeRecipeMacros(ings, Number(total_cooked_yield_g));
+  } catch (e) {
+    return res.status(400).json({ error: e.message });
+  }
+  const r = await db.run(
+    `INSERT INTO user_recipes(user_id,name,aliases,ingredients,total_cooked_yield_g,cooking_fat_g,kcal_per_100g,protein_per_100g,carbs_per_100g,fat_per_100g,fiber_per_100g,created_at,updated_at)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+    [req.userId, name, aliases || [], JSON.stringify(ings), Number(total_cooked_yield_g), fatG,
+     macros.kcal_per_100g, macros.protein_per_100g, macros.carbs_per_100g, macros.fat_per_100g, macros.fiber_per_100g,
+     Date.now(), Date.now()]
+  );
+  res.json(r.rows[0]);
+});
+
+app.put('/api/recipes/:id', async (req, res) => {
+  const existing = await db.get('SELECT * FROM user_recipes WHERE id=$1 AND user_id=$2', [req.params.id, req.userId]);
+  if (!existing) return res.status(404).json({ error: 'Recipe not found.' });
+  const { name, aliases, ingredients, total_cooked_yield_g, cooking_fat_g } = req.body || {};
+  const ings = Array.isArray(ingredients) && ingredients.length ? ingredients : JSON.parse(existing.ingredients);
+  const yieldG = Number(total_cooked_yield_g) || existing.total_cooked_yield_g;
+  const fatG = cooking_fat_g != null ? Number(cooking_fat_g) : existing.cooking_fat_g;
+  let withFat = ings;
+  if (fatG > 0 && !ings.some((i) => i.is_cooking_fat)) {
+    withFat = [...ings, { name: 'cooking fat', grams: fatG, kcal_per_100g: 900, protein_per_100g: 0, carbs_per_100g: 0, fat_per_100g: 100, fiber_per_100g: 0, is_cooking_fat: true }];
+  }
+  const macros = computeRecipeMacros(withFat, yieldG);
+  const r = await db.run(
+    `UPDATE user_recipes SET name=$1, aliases=$2, ingredients=$3, total_cooked_yield_g=$4, cooking_fat_g=$5,
+     kcal_per_100g=$6, protein_per_100g=$7, carbs_per_100g=$8, fat_per_100g=$9, fiber_per_100g=$10, updated_at=$11
+     WHERE id=$12 RETURNING *`,
+    [name || existing.name, aliases || existing.aliases, JSON.stringify(withFat), yieldG, fatG,
+     macros.kcal_per_100g, macros.protein_per_100g, macros.carbs_per_100g, macros.fat_per_100g, macros.fiber_per_100g,
+     Date.now(), existing.id]
+  );
+  res.json(r.rows[0]);
+});
+
+app.delete('/api/recipes/:id', async (req, res) => {
+  await db.run('DELETE FROM user_recipes WHERE id=$1 AND user_id=$2', [req.params.id, req.userId]);
+  res.json({ ok: true });
+});
+
+// Match AI items against the user's recipes (used by the frontend after analyze).
+app.post('/api/recipes/match', async (req, res) => {
+  const { itemNames } = req.body || {};
+  if (!Array.isArray(itemNames)) return res.status(400).json({ error: 'itemNames array required.' });
+  const recipes = await db.all('SELECT * FROM user_recipes WHERE user_id=$1', [req.userId]);
+  const matches = itemNames.map((name) => {
+    const m = matchRecipe(name, recipes);
+    return m ? { name, recipe_id: m.recipe.id, recipe_name: m.recipe.name, score: Math.round(m.score * 100) / 100 } : null;
+  });
+  res.json({ matches });
+});
+
 // ---------- day summary ----------
 app.get('/api/day', async (req, res) => {
   const date = req.query.date || today();
