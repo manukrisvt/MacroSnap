@@ -21,6 +21,7 @@ export default function Analyze() {
 
   const [preview, setPreview] = useState(null);
   const [base64, setBase64] = useState(null);
+  const [base64Mime, setBase64Mime] = useState('image/jpeg');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null); // { foods, total_calories, confidence }
@@ -43,9 +44,12 @@ export default function Analyze() {
   const [reanalyzing, setReanalyzing] = useState(false);
 
   async function handleDataUrl(dataUrl) {
+    // Preserve the original MIME (Capacitor may return image/png or heic) —
+    // hardcoding jpeg breaks Gemini's inline_data validation in BYO mode.
     const b64 = dataUrl.split(',')[1];
     setPreview(dataUrl);
     setBase64(b64);
+    setBase64Mime((dataUrl.match(/^data:([^;]+);/) || [])[1] || 'image/jpeg');
     // Phase 2: photo is captured — user can add a hint before analyzing.
     // Analysis starts immediately; hint applies to re-analyze.
     analyze(b64);
@@ -105,12 +109,13 @@ export default function Analyze() {
       let r;
       const context = { hint: hint || undefined, mealSource: mealSource || undefined, ...extraContext };
       if (aiSettings.aiMode === 'byo' && aiSettings.byoApiKey) {
-        // BYO key — call AI directly from device, key never touches server, no quota
-        const dataUrl = `data:image/jpeg;base64,${b64}`;
+        // BYO key — call AI directly from device, key never touches server, no quota.
+        // Use the ORIGINAL data URL (correct MIME) — Gemini rejects mismatched types.
+        const dataUrl = `data:${base64Mime};base64,${b64}`;
         r = await analyzeMealImageDirect(dataUrl, aiSettings, context);
       } else {
         // Server mode — use cloud backend's API key (quota limited)
-        r = await api.analyze(b64, 'image/jpeg', context);
+        r = await api.analyze(b64, base64Mime, context);
       }
       // Capture raw output immediately, before any user edits, for ai_estimates.
       rawResultRef.current = { ...r, foods: (r.foods || []).map((f) => ({ ...f })) };
@@ -168,10 +173,10 @@ export default function Analyze() {
       aiSettingsRef.current = aiSettings;
       let r;
       if (aiSettings.aiMode === 'byo' && aiSettings.byoApiKey) {
-        const dataUrl = `data:image/jpeg;base64,${base64}`;
+        const dataUrl = `data:${base64Mime};base64,${base64}`;
         r = await analyzeMealImageDirect(dataUrl, aiSettings, extraContext);
       } else {
-        r = await api.reanalyze(base64, 'image/jpeg', extraContext);
+        r = await api.reanalyze(base64, base64Mime, extraContext);
       }
       const foods = (r.foods || []).map((f) => ({ ...f, multiplier: 1 }));
       setResult({ foods, total_calories: r.total_calories, confidence: r.confidence, visible_fat_cues: r.visible_fat_cues || [], clarifying_question: r.clarifying_question || null });
@@ -232,7 +237,7 @@ export default function Analyze() {
             is_verified: verified,
             // Verified meals keep the 1024px image for future model re-runs.
             image: verified ? base64 : undefined,
-            image_mime: 'image/jpeg'
+            image_mime: base64Mime
           }
         : undefined;
       await api.addMeal({
