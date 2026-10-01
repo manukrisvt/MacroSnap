@@ -50,7 +50,7 @@ export async function createCheckoutSession(userId, email, planId, appUrl) {
     'line_items[0][price_data][currency]': 'usd',
     'line_items[0][price_data][unit_amount]': String(plan.priceUsd * 100),
     'line_items[0][price_data][recurring][interval]': 'month',
-    'line_items[0][price_data][product_data][name]': `MacroSnap ${plan.label}`,
+    'line_items[0][price_data][product_data][name]': `TallyBite ${plan.label}`,
     'line_items[0][quantity]': '1',
     customer_email: email || undefined,
     client_reference_id: String(userId),

@@ -62,7 +62,7 @@ export default function Login({ onAuthed }) {
           <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-500 text-3xl shadow-lg shadow-brand-500/30">
             📸
           </div>
-          <h1 className="text-2xl font-bold text-slate-900">MacroSnap</h1>
+          <h1 className="text-2xl font-bold text-slate-900">TallyBite</h1>
           <p className="mt-1 text-sm text-slate-500">Snap a photo, track your macros</p>
         </div>
 

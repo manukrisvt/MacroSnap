@@ -138,7 +138,7 @@ export default function Settings() {
         {/* Upgrade options */}
         {isIOSApp && (!profile?.plan || profile?.plan === 'free') && (
           <p className="mt-3 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
-            To choose a plan, sign in to your MacroSnap account on the web — it applies here automatically.
+            To choose a plan, sign in to your TallyBite account on the web — it applies here automatically.
             Or add your own AI key below for unlimited free snaps.
           </p>
         )}
@@ -314,7 +314,7 @@ export default function Settings() {
         className="mt-5 w-full rounded-xl border border-slate-200 bg-white py-3 text-sm font-semibold text-slate-600 active:scale-[.98]"
       >Log out</button>
 
-      <p className="mt-4 text-center text-[11px] text-slate-400">MacroSnap v1.0</p>
+      <p className="mt-4 text-center text-[11px] text-slate-400">TallyBite v1.0</p>
     </div>
   );
 }
@@ -365,7 +365,7 @@ function AIProviderSection({ ai, setAI, saved, setSaved }) {
       </div>
       {ai.aiMode === 'server' ? (
         <p className="mt-3 text-xs text-slate-500">
-          Uses MacroSnap's cloud API key. Free tier: 3 snaps. Premium: unlimited. No setup needed.
+          Uses TallyBite's cloud API key. Free tier: 3 snaps. Premium: unlimited. No setup needed.
         </p>
       ) : (
         <div className="mt-3 space-y-3">

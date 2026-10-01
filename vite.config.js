@@ -9,8 +9,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
       manifest: {
-        name: 'MacroSnap',
-        short_name: 'MacroSnap',
+        name: 'TallyBite',
+        short_name: 'TallyBite',
         description: 'Snap a photo, track your macros.',
         theme_color: '#10b981',
         background_color: '#0f172a',

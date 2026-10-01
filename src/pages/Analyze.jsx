@@ -502,7 +502,7 @@ export default function Analyze() {
               <div className="rounded-xl border border-slate-700 bg-slate-800 p-4 text-center">
                 <p className="text-sm font-semibold text-slate-200">Want more snaps?</p>
                 <p className="mt-1 text-xs text-slate-400">
-                  Sign in to your MacroSnap account on the web to choose a plan —
+                  Sign in to your TallyBite account on the web to choose a plan —
                   it applies here automatically.
                 </p>
                 <p className="mt-2 text-xs text-slate-500">

@@ -10,7 +10,7 @@ export default function Privacy() {
       <p className="mt-1 text-xs text-slate-400">Last updated: {UPDATED}</p>
 
       <p className="mt-4">
-        MacroSnap (&quot;we&quot;, &quot;the app&quot;) helps you track your nutrition by analyzing
+        TallyBite (&quot;we&quot;, &quot;the app&quot;) helps you track your nutrition by analyzing
         photos of your meals. This policy explains what data we collect and why.
       </p>
 
@@ -64,7 +64,7 @@ export default function Privacy() {
       </p>
 
       <p className="mt-8 text-xs text-slate-400">
-        This policy applies to the MacroSnap iOS app, Android app, and website.
+        This policy applies to the TallyBite iOS app, Android app, and website.
       </p>
     </div>
   );

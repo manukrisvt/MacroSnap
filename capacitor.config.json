@@ -1,6 +1,6 @@
 {
   "appId": "com.macrosnap.app",
-  "appName": "MacroSnap",
+  "appName": "TallyBite",
   "webDir": "dist",
   "bundledWebRuntime": false,
   "server": {
