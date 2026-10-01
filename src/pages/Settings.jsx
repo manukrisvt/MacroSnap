@@ -16,6 +16,7 @@ export default function Settings() {
   const [byoSnaps, setByoSnaps] = useState(0);
   const [feedbackMsg, setFeedbackMsg] = useState('');
   const [feedbackStatus, setFeedbackStatus] = useState(null);
+  const [checkoutError, setCheckoutError] = useState(null);
 
   useEffect(() => {
     api.settings().then(setS);
@@ -24,6 +25,16 @@ export default function Settings() {
     api.me().then(setProfile).catch(() => {});
     getBYOSnapCount().then(setByoSnaps);
   }, []);
+
+  async function startCheckout(planId) {
+    setCheckoutError(null);
+    try {
+      const { url } = await api.startCheckout(planId);
+      if (url) window.location.href = url;
+    } catch (e) {
+      setCheckoutError(e.message || 'Checkout failed. Try again.');
+    }
+  }
 
   function update(k, v) { setS((p) => ({ ...p, [k]: v })); }
 
@@ -62,11 +73,17 @@ export default function Settings() {
 
           {/* Tier badges */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            {profile.isPremium ? (
-              <span className="rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-3 py-1 text-xs font-bold text-white">
-                ⭐ PREMIUM
+            {profile.plan === 'plus' && (
+              <span className="rounded-full bg-gradient-to-r from-emerald-400 to-teal-500 px-3 py-1 text-xs font-bold text-white">
+                ⚡ PLUS
               </span>
-            ) : (
+            )}
+            {profile.plan === 'basic' && (
+              <span className="rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-3 py-1 text-xs font-bold text-white">
+                ⭐ BASIC
+              </span>
+            )}
+            {(!profile.plan || profile.plan === 'free') && (
               <span className="rounded-full bg-slate-700 px-3 py-1 text-xs font-bold text-slate-300">
                 FREE TIER
               </span>
@@ -78,22 +95,21 @@ export default function Settings() {
             )}
           </div>
 
-          {/* Quota bar (free tier only) */}
-          {!profile.isPremium && (
+          {/* Quota bar */}
+          {profile.quota && (
             <div className="mt-4">
               <div className="flex items-center justify-between text-xs text-slate-400">
                 <span>Cloud snaps</span>
-                <span>{profile.quota.used}/{profile.quota.limit} used · {profile.quota.remaining} left</span>
+                <span>
+                  {profile.quota.used}/{profile.quota.limit} used · {profile.quota.remaining} left
+                  {profile.quota.resetsMonthly ? ' · resets monthly' : ''}
+                </span>
               </div>
               <div className="mt-1.5 h-2 w-full overflow-hidden rounded-full bg-slate-700">
                 <div className="h-full rounded-full bg-brand-500 transition-all"
                   style={{ width: `${Math.min(100, (profile.quota.used / profile.quota.limit) * 100)}%` }} />
               </div>
             </div>
-          )}
-
-          {profile.isPremium && (
-            <p className="mt-3 text-xs text-slate-400">Unlimited cloud photo analyses included.</p>
           )}
         </div>
       ) : (
@@ -105,12 +121,44 @@ export default function Settings() {
         <h2 className="text-sm font-semibold text-slate-700">Plan</h2>
         <div className="mt-2 space-y-2">
           <PlanRow icon="🔑" label="BYO API Key" value={byoActive ? `Active · ${byoSnaps} snaps used · Unlimited` : 'Not set up'} active={byoActive} />
-          <PlanRow icon="⭐" label="Premium" value={profile?.isPremium ? 'Active' : 'Not subscribed'} active={profile?.isPremium} />
-          <PlanRow icon="📸" label="Cloud Snaps" value={profile?.isPremium ? 'Unlimited' : `${profile?.quota?.remaining || 0}/${profile?.quota?.limit || 3} left`} active={!profile?.isPremium} />
+          <PlanRow icon="📸" label="Cloud Snaps"
+            value={profile?.plan === 'plus' ? 'Plus · 500/month'
+              : profile?.plan === 'basic' ? 'Basic · 90/month'
+              : `${profile?.quota?.remaining || 0}/${profile?.quota?.limit || 3} left`}
+            active={profile?.plan !== 'free'} />
         </div>
-        {!byoActive && !profile?.isPremium && (
-          <p className="mt-3 rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
-            Add your own API key below for unlimited free snaps — no subscription needed.
+
+        {/* Upgrade options */}
+        {(!profile?.plan || profile?.plan === 'free') && (
+          <div className="mt-3 space-y-2">
+            <button onClick={() => startCheckout('basic')}
+              className="flex w-full items-center justify-between rounded-xl bg-amber-500 px-4 py-3 text-left text-white active:scale-[.98]">
+              <div>
+                <p className="text-sm font-semibold">Upgrade to Basic</p>
+                <p className="text-xs text-white/80">90 snaps / month (~3 a day)</p>
+              </div>
+              <p className="font-bold">$2/mo</p>
+            </button>
+            <button onClick={() => startCheckout('plus')}
+              className="flex w-full items-center justify-between rounded-xl bg-emerald-500 px-4 py-3 text-left text-white active:scale-[.98]">
+              <div>
+                <p className="text-sm font-semibold">Upgrade to Plus</p>
+                <p className="text-xs text-white/80">500 snaps / month — for power users</p>
+              </div>
+              <p className="font-bold">$10/mo</p>
+            </button>
+            {checkoutError && <p className="text-xs text-rose-500">{checkoutError}</p>}
+            {!byoActive && (
+              <p className="rounded-lg bg-brand-50 px-3 py-2 text-xs text-brand-700">
+                Or add your own API key below for unlimited free snaps — no subscription needed.
+              </p>
+            )}
+          </div>
+        )}
+        {(profile?.plan === 'basic' || profile?.plan === 'plus') && (
+          <p className="mt-3 rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+            You're on {profile.plan === 'plus' ? 'Plus' : 'Basic'} — {profile.quota?.limit} snaps/month.
+            Manage or cancel your subscription from the link in your payment confirmation email.
           </p>
         )}
       </section>

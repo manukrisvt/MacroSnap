@@ -139,7 +139,8 @@ async function initDB(retries = 5) {
         }
       }
 
-      // Seed foods once
+      // Seed foods once; then add any new seed foods not yet in the DB
+      // (idempotent — lets the global expansion ship to existing installs)
       const fc = await db.get('SELECT COUNT(*) as c FROM foods');
       if (fc?.c === 0 || fc?.c === '0') {
         const { seedFoods } = await import('./seedFoods.js');
@@ -150,6 +151,20 @@ async function initDB(retries = 5) {
           );
         }
         console.log(`[db] seeded ${seedFoods.length} foods`);
+      } else {
+        const { seedFoods } = await import('./seedFoods.js');
+        let added = 0;
+        for (const r of seedFoods) {
+          const exists = await db.get('SELECT id FROM foods WHERE name=$1', [r.name]);
+          if (!exists) {
+            await db.run(
+              'INSERT INTO foods(name,portion,calories,protein_g,carbs_g,fat_g,fiber_g,category) VALUES($1,$2,$3,$4,$5,$6,$7,$8)',
+              [r.name, r.portion, r.calories, r.protein_g, r.carbs_g, r.fat_g, r.fiber_g, r.category]
+            );
+            added++;
+          }
+        }
+        if (added > 0) console.log(`[db] added ${added} new foods`);
       }
       console.log('[db] initialization complete');
       // Run forward-only migrations (item corrections, ai_estimates, etc.)

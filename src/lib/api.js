@@ -116,5 +116,10 @@ export const api = {
   addRecipe: (r) => req('/recipes', { method: 'POST', body: JSON.stringify(r) }),
   updateRecipe: (id, r) => req(`/recipes/${id}`, { method: 'PUT', body: JSON.stringify(r) }),
   deleteRecipe: (id) => req(`/recipes/${id}`, { method: 'DELETE' }),
-  matchRecipes: (itemNames) => req('/recipes/match', { method: 'POST', body: JSON.stringify({ itemNames }) })
+  matchRecipes: (itemNames) => req('/recipes/match', { method: 'POST', body: JSON.stringify({ itemNames }) }),
+
+  // Subscriptions
+  plan: () => req('/plan'),
+  plans: () => req('/plans'),
+  startCheckout: (planId) => req('/checkout', { method: 'POST', body: JSON.stringify({ planId }) })
 };

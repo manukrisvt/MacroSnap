@@ -11,7 +11,12 @@ import { signup, login, authMiddleware, requireAuth, checkQuota, logSnap, delete
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '12mb' }));
+// Parse JSON for everything EXCEPT the Stripe webhook, which needs the
+// raw body for signature verification.
+app.use((req, res, next) => {
+  if (req.path === '/api/stripe/webhook') return next();
+  express.json({ limit: '12mb' })(req, res, next);
+});
 
 const PORT = process.env.PORT || 8787;
 const today = () => new Date().toISOString().slice(0, 10);
@@ -238,12 +243,75 @@ app.get('/api/usage', async (req, res) => {
   res.json(await checkQuota(req.userId));
 });
 
+// ---------- subscription plans ----------
+import { PLANS, PLAN_ORDER } from '../../shared/plans.js';
+import { createCheckoutSession, verifyStripeSignature, handleStripeEvent } from './stripe.js';
+
+// Current plan + usage (authenticated)
+app.get('/api/plan', async (req, res) => {
+  const quota = await checkQuota(req.userId);
+  const user = await db.get('SELECT plan, plan_renews_at FROM users WHERE id=$1', [req.userId]);
+  res.json({
+    plan: quota.plan,
+    limit: quota.limit,
+    used: quota.used,
+    remaining: quota.remaining,
+    resetsMonthly: quota.resetsMonthly,
+    renewsAt: user?.plan_renews_at || null,
+    stripeConfigured: !!process.env.STRIPE_SECRET_KEY
+  });
+});
+
+// All plans (public pricing info)
+app.get('/api/plans', (req, res) => {
+  res.json({ plans: PLAN_ORDER.map((id) => PLANS[id]), stripeConfigured: !!process.env.STRIPE_SECRET_KEY });
+});
+
+// Start a Stripe checkout session for an upgrade
+app.post('/api/checkout', async (req, res) => {
+  try {
+    const { planId } = req.body || {};
+    const user = await db.get('SELECT id, email FROM users WHERE id=$1', [req.userId]);
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    const appUrl = process.env.APP_URL || `https://${req.headers.host}`;
+    const session = await createCheckoutSession(req.userId, user.email, planId, appUrl);
+    res.json(session);
+  } catch (err) {
+    console.error('[checkout] error:', err.message);
+    res.status(400).json({ error: err.message, code: err.code });
+  }
+});
+
+// Stripe webhook (UNAUTHENTICATED by design — verified by signature).
+// Body arrives raw thanks to the json-parser exclusion above.
+app.post('/api/stripe/webhook', async (req, res) => {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) return res.status(501).json({ error: 'Webhook not configured.' });
+  const sig = req.headers['stripe-signature'];
+  const payload = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : String(req.body);
+  if (!verifyStripeSignature(payload, sig, secret)) {
+    return res.status(400).json({ error: 'Invalid signature.' });
+  }
+  try {
+    const result = await handleStripeEvent(JSON.parse(payload));
+    res.json(result);
+  } catch (e) {
+    console.error('[stripe webhook] error:', e.message);
+    res.status(500).json({ error: 'Webhook processing failed.' });
+  }
+});
+
 // ---------- user profile ----------
 app.get('/api/me', async (req, res) => {
-  const user = await db.get('SELECT id, email, name, is_premium FROM users WHERE id=$1', [req.userId]);
+  const user = await db.get('SELECT id, email, name, plan FROM users WHERE id=$1', [req.userId]);
   if (!user) return res.status(404).json({ error: 'User not found' });
   const quota = await checkQuota(req.userId);
-  res.json({ id: user.id, email: user.email, name: user.name, isPremium: user.is_premium == 1, tier: user.is_premium == 1 ? 'premium' : 'free', quota });
+  res.json({
+    id: user.id, email: user.email, name: user.name,
+    plan: user.plan || 'free',
+    isPremium: quota.isPremium,
+    quota
+  });
 });
 
 // ---------- barcode lookup ----------

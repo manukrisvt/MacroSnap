@@ -160,14 +160,27 @@ export function requireAuth(req, res, next) {
 }
 
 // ---- Quota ----
+import { getPlan, monthStart } from '../shared/plans.js';
+
 export async function isPremium(userId) {
-  const row = await db.get('SELECT is_premium FROM users WHERE id=$1', [userId]);
-  return row?.is_premium === 1 || row?.is_premium === '1';
+  const row = await db.get('SELECT plan FROM users WHERE id=$1', [userId]);
+  const plan = row?.plan || 'free';
+  return plan === 'basic' || plan === 'plus';
+}
+
+export async function getPlanId(userId) {
+  const row = await db.get('SELECT plan FROM users WHERE id=$1', [userId]);
+  return row?.plan || 'free';
 }
 
 export async function getSnapCount(userId) {
+  const plan = await getPlanId(userId);
+  const planDef = getPlan(plan);
+  // Free tier: lifetime count. Paid tiers: current calendar month.
+  const since = planDef.lifetimeQuota ? 0 : monthStart();
   const row = await db.get(
-    "SELECT COUNT(*) as c FROM usage_log WHERE user_id=$1 AND endpoint='analyze'", [userId]
+    "SELECT COUNT(*) as c FROM usage_log WHERE user_id=$1 AND endpoint='analyze' AND created_at >= $2",
+    [userId, since]
   );
   return parseInt(row?.c || 0, 10);
 }
@@ -180,17 +193,26 @@ export async function logSnap(userId) {
 }
 
 export async function checkQuota(userId) {
-  const premium = await isPremium(userId);
+  const planId = await getPlanId(userId);
+  const plan = getPlan(planId);
   const used = await getSnapCount(userId);
-  const limit = FREE_SNAP_LIMIT;
+  const limit = plan.snapsPerMonth;
   return {
-    allowed: premium || used < limit,
+    allowed: used < limit,
     used, limit,
     remaining: Math.max(0, limit - used),
-    isPremium: premium
+    plan: planId,
+    isPremium: planId !== 'free',
+    resetsMonthly: !plan.lifetimeQuota
   };
 }
 
+export async function setPlan(userId, planId, renewsAt = null) {
+  await db.run('UPDATE users SET plan=$1, plan_renews_at=$2, is_premium=$3 WHERE id=$4',
+    [planId, renewsAt, (planId === 'basic' || planId === 'plus') ? 1 : 0, userId]);
+}
+
+// Backward compat
 export async function setPremium(userId, premium) {
-  await db.run('UPDATE users SET is_premium=$1 WHERE id=$2', [premium ? 1 : 0, userId]);
+  await setPlan(userId, premium ? 'plus' : 'free');
 }

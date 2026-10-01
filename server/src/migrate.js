@@ -39,6 +39,7 @@ const MIGRATIONS = [
         created_at    BIGINT NOT NULL
       );
     `
+  },
   {
     name: '003_user_recipes',
     sql: `
@@ -59,6 +60,16 @@ const MIGRATIONS = [
         updated_at          BIGINT NOT NULL
       );
       CREATE INDEX IF NOT EXISTS idx_user_recipes_user ON user_recipes(user_id);
+    `
+  },
+  {
+    name: '004_subscription_plans',
+    sql: `
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS plan_renews_at BIGINT;
+      -- Migrate existing premium users to the plus plan
+      UPDATE users SET plan='plus' WHERE is_premium=1;
+      CREATE INDEX IF NOT EXISTS idx_usage_month ON usage_log(user_id, endpoint, created_at);
     `
   }
 ];

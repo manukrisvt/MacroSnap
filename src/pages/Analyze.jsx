@@ -51,6 +51,17 @@ export default function Analyze() {
   // Phase 4: recipe matching
   const [recipeApplied, setRecipeApplied] = useState(null); // { itemIdx, recipe, original }
   const [recipes, setRecipes] = useState([]);
+  const [checkoutError, setCheckoutError] = useState(null);
+
+  async function startCheckout(planId) {
+    setCheckoutError(null);
+    try {
+      const { url } = await api.startCheckout(planId);
+      if (url) window.location.href = url;
+    } catch (e) {
+      setCheckoutError(e.message || 'Checkout failed. Try again.');
+    }
+  }
 
   async function handleDataUrl(dataUrl) {
     // Preserve the original MIME (Capacitor may return image/png or heic) —
@@ -474,26 +485,47 @@ export default function Analyze() {
 
       {/* Quota paywall */}
       {quotaExceeded && !loading && (
-        <div className="mt-4 rounded-2xl bg-slate-900 p-6 text-center text-white">
-          <div className="text-4xl">🔒</div>
-          <p className="mt-2 text-lg font-bold">Free snaps used up</p>
-          <p className="mt-1 text-sm text-slate-400">
-            You've used all {quotaExceeded.limit} free photo analyses.
-          </p>
-          <div className="mt-4 space-y-2">
-            <Link to="/settings"
-              className="block rounded-xl bg-brand-500 py-3 font-semibold text-white active:scale-[.98]">
-              🔑 Bring your own API key (Free)
-            </Link>
-            <p className="text-xs text-slate-500">
-              Add your own OpenRouter/OpenAI key in Settings to get unlimited snaps for free.
-              No subscription needed.
+        <div className="mt-4 rounded-2xl bg-slate-900 p-6 text-white">
+          <div className="text-center">
+            <div className="text-4xl">📸</div>
+            <p className="mt-2 text-lg font-bold">You've used your {quotaExceeded.limit} free snaps</p>
+            <p className="mt-1 text-sm text-slate-400">
+              Keep the momentum going — pick a plan that fits your pace.
             </p>
+          </div>
+          <div className="mt-5 space-y-3">
+            <button
+              onClick={() => startCheckout('basic')}
+              className="flex w-full items-center justify-between rounded-xl bg-brand-500 px-4 py-3 text-left active:scale-[.98]"
+            >
+              <div>
+                <p className="font-semibold">Basic</p>
+                <p className="text-xs text-white/80">90 snaps / month (~3 a day)</p>
+              </div>
+              <p className="text-lg font-bold">$2<span className="text-xs font-normal text-white/80">/mo</span></p>
+            </button>
+            <button
+              onClick={() => startCheckout('plus')}
+              className="flex w-full items-center justify-between rounded-xl bg-emerald-500 px-4 py-3 text-left active:scale-[.98]"
+            >
+              <div>
+                <p className="font-semibold">Plus</p>
+                <p className="text-xs text-white/80">500 snaps / month — for power users</p>
+              </div>
+              <p className="text-lg font-bold">$10<span className="text-xs font-normal text-white/80">/mo</span></p>
+            </button>
+            <Link to="/settings"
+              className="block rounded-xl border border-slate-700 py-3 text-center text-sm font-medium text-slate-300">
+              🔑 Or bring your own API key (free, unlimited)
+            </Link>
           </div>
           <button
             onClick={() => navigate('/manual')}
             className="mt-3 w-full rounded-xl border border-slate-700 py-3 text-sm font-medium text-slate-300"
           >Add food manually →</button>
+          {checkoutError && (
+            <p className="mt-2 text-center text-xs text-rose-400">{checkoutError}</p>
+          )}
         </div>
       )}
 
