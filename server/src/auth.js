@@ -179,11 +179,20 @@ async function verifyAppleIdentityToken(idToken) {
 
   // Verify audience matches our bundle ID
   const expectedAud = process.env.APPLE_BUNDLE_ID || 'com.manukrisvt.macrosnap';
-  if (payload.aud !== expectedAud) return null;
+  if (payload.aud !== expectedAud) {
+    console.error(`[apple-signin] audience mismatch: got ${payload.aud}, expected ${expectedAud}`);
+    return null;
+  }
   // Verify issuer
-  if (payload.iss !== 'https://appleid.apple.com') return null;
+  if (payload.iss !== 'https://appleid.apple.com') {
+    console.error('[apple-signin] bad issuer:', payload.iss);
+    return null;
+  }
   // Verify expiry (60s clock skew tolerance)
-  if (!payload.exp || (payload.exp + 60) * 1000 < Date.now()) return null;
+  if (!payload.exp || (payload.exp + 60) * 1000 < Date.now()) {
+    console.error('[apple-signin] token expired');
+    return null;
+  }
 
   // Find the matching key and verify signature
   const keys = await getApplePublicKeys();
@@ -209,7 +218,10 @@ async function verifyWithKey(jwk, headerB64, payloadB64, sigB64, payload) {
   const signedContent = Buffer.from(`${headerB64}.${payloadB64}`);
   const signature = base64UrlDecode(sigB64);
   const valid = crypto.verify('RSA-SHA256', signedContent, jwkKey, signature);
-  if (!valid) return null;
+  if (!valid) {
+    console.error('[apple-signin] signature verification failed');
+    return null;
+  }
   return payload;
 }
 
