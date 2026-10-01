@@ -180,7 +180,18 @@ export default function Analyze() {
       if (e.status === 429) {
         setError(e.message || 'Too many re-analyses. Edit items manually instead.');
       } else {
-        setError("Couldn't re-analyze. You can still edit the items manually below.");
+        // Surface the real cause so failures are diagnosable
+        let msg = "Couldn't re-analyze. You can still edit the items manually below.";
+        if (e.code === 'BAD_JSON' || e.code === 'BAD_SCHEMA') {
+          msg = 'The AI returned an unexpected response. Try rewording your correction, or edit items manually.';
+        } else if (e.code === 'NETWORK') {
+          msg = "Can't reach the server. Check your connection and try again.";
+        } else if (e.code === 'API_ERROR') {
+          msg = `AI provider error${e.status ? ` (${e.status})` : ''}. Try again in a moment.`;
+        } else if (e.message && !/Request failed/i.test(e.message)) {
+          msg = `${msg} (${e.message})`;
+        }
+        setError(msg);
       }
     } finally {
       setReanalyzing(false);
