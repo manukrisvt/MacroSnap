@@ -13,6 +13,7 @@ import Trends from './pages/Trends.jsx';
 import Settings from './pages/Settings.jsx';
 import ManualAdd from './pages/ManualAdd.jsx';
 import Favorites from './pages/Favorites.jsx';
+import Privacy from './pages/Privacy.jsx';
 
 function AuthGate() {
   const [authed, setAuthed] = React.useState(isLoggedIn());
@@ -56,6 +57,7 @@ function AuthGate() {
         <Route path="trends" element={<Trends />} />
         <Route path="settings" element={<Settings />} />
         <Route path="favorites" element={<Favorites />} />
+        <Route path="privacy" element={<Privacy />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

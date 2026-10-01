@@ -99,6 +99,11 @@ export default function Login({ onAuthed }) {
             className="font-medium text-brand-600"
           >{mode === 'signup' ? 'Log in' : 'Sign up'}</button>
         </p>
+
+        <p className="mt-8 text-center text-[11px] text-slate-400">
+          By continuing you agree to our{' '}
+          <a href="#/privacy" className="underline">Privacy Policy</a>
+        </p>
       </div>
     </div>
   );
