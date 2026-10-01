@@ -4,9 +4,9 @@
 
 export const PROMPT_VERSION = '2.0';
 
-// Phase 3 placeholder — grams of cooking fat per level, per meal.
-export const FAT_GRAMS = { none: 0, light: 5, normal: 10, heavy: 20 };
-export const FAT_KCAL_PER_G = 9;
+// Phase 3 — fat constants live in shared/fatConfig.js (used by server AND
+// frontend). Re-exported here for server-side convenience.
+export { FAT_GRAMS, FAT_KCAL_PER_G, FAT_LEVELS, FAT_TYPES, computeFatItem, defaultFatLevel } from '../../shared/fatConfig.js';
 
 // Phase 1 placeholder — display-only multipliers (identity by default).
 // Applied to what the user SEES; raw_model_output is always stored untouched.

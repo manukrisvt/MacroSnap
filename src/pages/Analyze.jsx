@@ -9,6 +9,8 @@ import { analyzeMealImageDirect } from '../lib/clientAI.js';
 import { getRandomFunnyMessage } from '../lib/funnyMessages.js';
 import Header from '../components/Header.jsx';
 import MealItemEditor from '../components/MealItemEditor.jsx';
+import FatSelector from '../components/FatSelector.jsx';
+import { computeFatItem, defaultFatLevel } from '../../shared/fatConfig.js';
 
 const isNative = Capacitor.isNativePlatform();
 
@@ -42,6 +44,9 @@ export default function Analyze() {
   const [showCorrection, setShowCorrection] = useState(false);
   const [correctionText, setCorrectionText] = useState('');
   const [reanalyzing, setReanalyzing] = useState(false);
+  // Phase 3: cooking fat selector
+  const [fatLevel, setFatLevel] = useState(null); // null = not yet set for this meal
+  const [fatType, setFatType] = useState('oil');
 
   async function handleDataUrl(dataUrl) {
     // Preserve the original MIME (Capacitor may return image/png or heic) —
@@ -122,6 +127,10 @@ export default function Analyze() {
       rawResultRef.current = { ...r, foods: (r.foods || []).map((f) => ({ ...f })) };
       const foods = (r.foods || []).map((f) => ({ ...f, multiplier: 1 }));
       setResult({ foods, total_calories: r.total_calories, confidence: r.confidence, visible_fat_cues: r.visible_fat_cues || [], clarifying_question: r.clarifying_question || null });
+      // Phase 3: default fat level — cues -> normal; Restaurant -> normal; else light.
+      // Remembered last choice per meal category takes precedence.
+      const remembered = getRememberedFat(mealType);
+      setFatLevel(remembered ?? defaultFatLevel(r.visible_fat_cues || [], mealSource));
       if (r.quota) setQuotaInfo(r.quota);
       if (foods.length === 0) setError('No foods detected. Enter manually instead.');
     } catch (e) {
@@ -161,6 +170,29 @@ export default function Analyze() {
   function setItems(items) {
     setResult((prev) => ({ ...prev, foods: items }));
   }
+
+  // Phase 3: remember the user's last fat choice per meal category.
+  function getRememberedFat(meal) {
+    try { return JSON.parse(localStorage.getItem(`macrosnap_fat_${meal}`) || 'null'); } catch { return null; }
+  }
+  function rememberFat(meal, level, type) {
+    try { localStorage.setItem(`macrosnap_fat_${meal}`, JSON.stringify({ level, type })); } catch {}
+  }
+
+  function changeFatLevel(level) {
+    setFatLevel(level);
+    rememberFat(mealType, level, fatType);
+  }
+  function changeFatType(type) {
+    setFatType(type);
+    rememberFat(mealType, fatLevel, type);
+  }
+
+  // The cooking fat is a real, visible, editable line item in the list.
+  const fatItem = fatLevel ? computeFatItem(fatLevel, fatType) : null;
+  const displayItems = verified
+    ? gtItems
+    : fatItem ? [...(result?.foods || []), fatItem] : (result?.foods || []);
 
   // Phase 2: re-analyze with extra context (hint, correction, clarifying answer).
   // Does NOT consume a free snap (server-side /api/reanalyze is quota-free,
@@ -217,10 +249,10 @@ export default function Analyze() {
 
   const totalCal = verified
     ? gtItems.reduce((s, f) => s + Math.round((f.calories || 0) * (f.multiplier || 1)), 0)
-    : (result?.foods || []).reduce((s, f) => s + Math.round((f.calories || 0) * (f.multiplier || 1)), 0);
+    : displayItems.reduce((s, f) => s + Math.round((f.calories || 0) * (f.multiplier || 1)), 0);
 
   async function logIt() {
-    const items = verified ? gtItems : (result?.foods || []);
+    const items = verified ? gtItems : displayItems;
     if (!result || items.length === 0) return;
     setLogging(true);
     try {
@@ -233,6 +265,7 @@ export default function Analyze() {
             prompt_version: '2.0',
             raw_model_output: raw,
             user_hint: [hint, mealSource].filter(Boolean).join(' — ') || null,
+            fat_level: verified ? null : (fatLevel && fatLevel !== 'none' ? `${fatLevel}:${fatType}` : fatLevel),
             final_items: verified ? null : items.map(cleanItem),
             ground_truth_items: verified ? items.map(cleanItem) : null,
             is_verified: verified,
@@ -482,6 +515,11 @@ export default function Analyze() {
             ))}
           </div>
 
+          {/* Phase 3: cooking fat selector — AI excludes cooking fat, this adds it back */}
+          {!verified && fatLevel && (
+            <FatSelector level={fatLevel} type={fatType} onLevel={changeFatLevel} onType={changeFatType} />
+          )}
+
           {/* Verified meal toggle — build ground truth */}
           <button
             onClick={() => { setVerified((v) => !v); if (!verified && gtItems.length === 0) setGtItems([]); }}
@@ -500,7 +538,19 @@ export default function Analyze() {
               <MealItemEditor items={gtItems} onChange={setGtItems} />
             </div>
           ) : (
-            <MealItemEditor items={result.foods} onChange={setItems} showConfidence />
+            <div>
+              <MealItemEditor items={result.foods} onChange={setItems} showConfidence />
+              {/* Cooking fat as its own transparent line item */}
+              {fatItem && fatItem.calories > 0 && (
+                <div className="mt-3 flex items-center justify-between rounded-2xl bg-amber-50 px-4 py-3 ring-1 ring-amber-200">
+                  <div>
+                    <p className="text-sm font-semibold text-amber-900">🫕 Cooking fat: {fatItem.type}, {fatItem.level}</p>
+                    <p className="text-[11px] text-amber-600">{fatItem.grams}g · {fatItem.fat_g}g fat</p>
+                  </div>
+                  <span className="text-sm font-bold text-amber-700">+{fatItem.calories} kcal</span>
+                </div>
+              )}
+            </div>
           )}
 
           <div className="mt-2 rounded-2xl bg-slate-900 p-4 text-white shadow-xl">
