@@ -209,11 +209,7 @@ async function verifyAppleIdentityToken(idToken) {
 }
 
 async function verifyWithKey(jwk, headerB64, payloadB64, sigB64, payload) {
-  // Build RSA public key from JWK components (n, e)
-  const modulus = base64UrlDecode(jwk.n);
-  const exponent = base64UrlDecode(jwk.e).readUInt32BE(0) === 0x10001
-    ? base64UrlDecode(jwk.e).subarray(1)
-    : base64UrlDecode(jwk.e);
+  // Build RSA public key directly from the JWK (crypto handles n/e decoding)
   const jwkKey = crypto.createPublicKey({ key: { kty: 'RSA', n: jwk.n, e: jwk.e }, format: 'jwk' });
   const signedContent = Buffer.from(`${headerB64}.${payloadB64}`);
   const signature = base64UrlDecode(sigB64);

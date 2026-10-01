@@ -49,10 +49,14 @@ async function req(path, opts = {}) {
     ...opts
   });
   if (res.status === 401) {
-    // Token expired — clear auth and reload to login screen
-    logout();
-    if (typeof window !== 'undefined') window.location.reload();
-    throw new Error('Session expired. Please log in again.');
+    // Auth endpoints (login/signup/apple) legitimately return 401 for bad
+    // credentials — show the error, don't wipe the session and reload.
+    const isAuthPath = path === '/login' || path === '/signup' || path === '/auth/apple';
+    if (!isAuthPath) {
+      logout();
+      if (typeof window !== 'undefined') window.location.reload();
+      throw new Error('Session expired. Please log in again.');
+    }
   }
   if (!res.ok) {
     let msg = `Request failed (${res.status})`;
