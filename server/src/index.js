@@ -141,6 +141,50 @@ app.post('/api/admin/clear-all', async (req, res) => {
   }
 });
 
+// ---------- admin: export verified ai_estimates as CSV ----------
+app.get('/api/admin/export/ai-estimates', async (req, res) => {
+  const adminKey = req.headers['x-admin-key'] || req.query.key;
+  if (adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ error: 'Unauthorized.' });
+  }
+  try {
+    const rows = await db.all(`
+      SELECT e.id, e.user_id, e.meal_id, e.model_name, e.prompt_version,
+             e.raw_model_output, e.final_items, e.ground_truth_items,
+             e.is_verified, e.created_at
+      FROM ai_estimates e
+      WHERE e.is_verified = TRUE
+      ORDER BY e.created_at DESC
+    `);
+    const esc = (v) => {
+      if (v == null) return '';
+      const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const lines = ['estimate_id,user_id,meal_id,model_name,prompt_version,created_at,is_verified,raw_model_output,final_items,ground_truth_items,ai_total_kcal,gt_total_kcal,ai_total_grams,gt_total_grams'];
+    for (const r of rows) {
+      const raw = r.raw_model_output || {};
+      const rawFoods = Array.isArray(raw.foods) ? raw.foods : [];
+      const gt = Array.isArray(r.ground_truth_items) ? r.ground_truth_items : [];
+      const aiKcal = rawFoods.reduce((s, f) => s + (Number(f.calories) || 0), 0);
+      const gtKcal = gt.reduce((s, f) => s + (Number(f.calories) || 0), 0);
+      const aiG = rawFoods.reduce((s, f) => s + (Number(f.grams) || 0), 0);
+      const gtG = gt.reduce((s, f) => s + (Number(f.grams) || 0), 0);
+      lines.push([
+        r.id, r.user_id, r.meal_id, esc(r.model_name), esc(r.prompt_version),
+        r.created_at, r.is_verified, esc(raw), esc(r.final_items), esc(gt),
+        aiKcal, gtKcal, aiG, gtG
+      ].join(','));
+    }
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', 'attachment; filename="ai_estimates_verified.csv"');
+    res.send(lines.join('\n'));
+  } catch (e) {
+    console.error('[export] error:', e.message);
+    res.status(500).json({ error: 'Failed to export.' });
+  }
+});
+
 // ---------- photo analysis ----------
 app.post('/api/analyze', async (req, res) => {
   try {
@@ -231,7 +275,7 @@ app.get('/api/meals/:id', async (req, res) => {
 });
 
 app.post('/api/meals', async (req, res) => {
-  const { date, meal_type, photo_thumb, items } = req.body || {};
+  const { date, meal_type, photo_thumb, items, ai_estimate } = req.body || {};
   if (!meal_type) return res.status(400).json({ error: 'meal_type required' });
   const d = date || today();
   const mealId = await db.transaction(async (tx) => {
@@ -242,9 +286,37 @@ app.post('/api/meals', async (req, res) => {
     const id = r.rows?.[0]?.id || r.lastInsertRowid;
     for (const it of items || []) {
       await tx.run(
-        'INSERT INTO meal_items(meal_id,name,portion,multiplier,calories,protein_g,carbs_g,fat_g,fiber_g) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-        [id, it.name, it.portion||'', Number(it.multiplier)||1, Math.round(Number(it.calories)||0), Number(it.protein_g)||0, Number(it.carbs_g)||0, Number(it.fat_g)||0, Number(it.fiber_g)||0]
+        'INSERT INTO meal_items(meal_id,name,portion,multiplier,calories,protein_g,carbs_g,fat_g,fiber_g,grams,confidence) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+        [id, it.name, it.portion||'', Number(it.multiplier)||1, Math.round(Number(it.calories)||0), Number(it.protein_g)||0, Number(it.carbs_g)||0, Number(it.fat_g)||0, Number(it.fiber_g)||0, it.grams != null ? Number(it.grams) : null, it.confidence || null]
       );
+    }
+    // Persist the AI estimate (raw vs final vs ground truth) for accuracy analysis.
+    if (ai_estimate && (ai_estimate.raw_model_output || ai_estimate.final_items)) {
+      const er = await tx.run(
+        `INSERT INTO ai_estimates(user_id,meal_id,model_name,prompt_version,raw_model_output,user_hint,fat_level,final_items,ground_truth_items,is_verified,created_at)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+        [
+          req.userId, id,
+          String(ai_estimate.model_name || ''),
+          String(ai_estimate.prompt_version || ''),
+          ai_estimate.raw_model_output ? JSON.stringify(ai_estimate.raw_model_output) : null,
+          ai_estimate.user_hint || null,
+          ai_estimate.fat_level || null,
+          ai_estimate.final_items ? JSON.stringify(ai_estimate.final_items) : null,
+          ai_estimate.ground_truth_items ? JSON.stringify(ai_estimate.ground_truth_items) : null,
+          ai_estimate.is_verified === true,
+          Date.now()
+        ]
+      );
+      const estId = er.rows?.[0]?.id;
+      // Verified meals keep the 1024px image so future models/prompts can be
+      // re-run against the same ground truth.
+      if (estId && ai_estimate.is_verified === true && ai_estimate.image) {
+        await tx.run(
+          'INSERT INTO ai_images(ai_estimate_id,image_base64,mime,created_at) VALUES($1,$2,$3,$4)',
+          [estId, ai_estimate.image, ai_estimate.image_mime || 'image/jpeg', Date.now()]
+        );
+      }
     }
     return id;
   });

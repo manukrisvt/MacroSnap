@@ -152,6 +152,10 @@ async function initDB(retries = 5) {
         console.log(`[db] seeded ${seedFoods.length} foods`);
       }
       console.log('[db] initialization complete');
+      // Run forward-only migrations (item corrections, ai_estimates, etc.)
+      const { runMigrations, backfillFoodGrams } = await import('./migrate.js');
+      await runMigrations();
+      await backfillFoodGrams();
       return;
     } catch (e) {
       console.error(`[db] init attempt ${i+1}/${retries} failed:`, e.message);

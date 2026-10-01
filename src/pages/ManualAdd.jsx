@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { MEAL_TYPES, guessMealType, todayStr } from '../lib/image.js';
 import Header from '../components/Header.jsx';
+import MealItemEditor from '../components/MealItemEditor.jsx';
 
 export default function ManualAdd() {
   const navigate = useNavigate();
@@ -42,13 +43,7 @@ export default function ManualAdd() {
   }
 
   function addFood(f) {
-    setSelected((p) => [...p, { ...f, multiplier: 1, source: 'db' }]);
-  }
-  function removeItem(idx) {
-    setSelected((p) => p.filter((_, i) => i !== idx));
-  }
-  function setMult(idx, m) {
-    setSelected((p) => p.map((it, i) => (i === idx ? { ...it, multiplier: m } : it)));
+    setSelected((p) => [...p, { ...f, multiplier: 1, grams: f.grams_per_portion || null, confidence: null, source: 'db' }]);
   }
   async function addCustom() {
     if (!custom.name) return;
@@ -58,7 +53,7 @@ export default function ManualAdd() {
     setShowCustom(false);
   }
 
-  const total = selected.reduce((s, f) => s + Math.round((f.calories || 0) * f.multiplier), 0);
+  const total = selected.reduce((s, f) => s + Math.round((f.calories || 0) * (f.multiplier || 1)), 0);
 
   async function log() {
     if (selected.length === 0) return;
@@ -72,6 +67,8 @@ export default function ManualAdd() {
           name: f.name,
           portion: f.portion || '',
           multiplier: f.multiplier,
+          grams: f.grams ?? null,
+          confidence: null,
           calories: Math.round((f.calories || 0) * f.multiplier),
           protein_g: Math.round((f.protein_g || 0) * f.multiplier * 10) / 10,
           carbs_g: Math.round((f.carbs_g || 0) * f.multiplier * 10) / 10,
@@ -162,25 +159,7 @@ export default function ManualAdd() {
       {selected.length > 0 && (
         <div className="mt-4 space-y-2">
           <h2 className="text-sm font-semibold text-slate-700">In this meal</h2>
-          {selected.map((f, idx) => (
-            <div key={idx} className="rounded-2xl bg-white p-3 shadow-sm">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-slate-800">{f.name}</p>
-                  <p className="text-[11px] text-slate-400">{f.portion} · {Math.round((f.calories||0)*f.multiplier)} kcal</p>
-                </div>
-                <button onClick={() => removeItem(idx)} className="text-slate-300">✕</button>
-              </div>
-              <div className="mt-2 flex gap-1">
-                {[0.5, 1, 1.5, 2].map((m) => (
-                  <button key={m} onClick={() => setMult(idx, m)}
-                    className={`flex-1 rounded-lg py-1 text-xs font-semibold ${
-                      f.multiplier === m ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-500'
-                    }`}>{m}x</button>
-                ))}
-              </div>
-            </div>
-          ))}
+          <MealItemEditor items={selected} onChange={setSelected} />
         </div>
       )}
 

@@ -8,8 +8,8 @@ import { getAISettings } from '../lib/aiSettings.js';
 import { analyzeMealImageDirect } from '../lib/clientAI.js';
 import { getRandomFunnyMessage } from '../lib/funnyMessages.js';
 import Header from '../components/Header.jsx';
+import MealItemEditor from '../components/MealItemEditor.jsx';
 
-const MULTIPLIERS = [0.5, 1, 1.5, 2];
 const isNative = Capacitor.isNativePlatform();
 
 export default function Analyze() {
@@ -29,6 +29,12 @@ export default function Analyze() {
   const [quotaInfo, setQuotaInfo] = useState(null);
   const [quotaExceeded, setQuotaExceeded] = useState(null);
   const [funnyMsg, setFunnyMsg] = useState('');
+  // Raw AI output captured the instant the API responds — BEFORE the user sees
+  // or edits anything — so ai_estimates stays an unbiased record.
+  const rawResultRef = useRef(null);
+  const aiSettingsRef = useRef(null);
+  const [verified, setVerified] = useState(false); // "I weighed this" mode
+  const [gtItems, setGtItems] = useState([]); // ground-truth items when verified
 
   async function handleDataUrl(dataUrl) {
     const b64 = dataUrl.split(',')[1];
@@ -87,6 +93,7 @@ export default function Analyze() {
     setFunnyMsg(getRandomFunnyMessage());
     try {
       const aiSettings = await getAISettings();
+      aiSettingsRef.current = aiSettings;
       let r;
       if (aiSettings.aiMode === 'byo' && aiSettings.byoApiKey) {
         // BYO key — call AI directly from device, key never touches server, no quota
@@ -96,6 +103,8 @@ export default function Analyze() {
         // Server mode — use cloud backend's API key (quota limited)
         r = await api.analyze(b64, 'image/jpeg');
       }
+      // Capture raw output immediately, before any user edits, for ai_estimates.
+      rawResultRef.current = { ...r, foods: (r.foods || []).map((f) => ({ ...f })) };
       const foods = (r.foods || []).map((f) => ({ ...f, multiplier: 1 }));
       setResult({ foods, total_calories: r.total_calories, confidence: r.confidence });
       if (r.quota) setQuotaInfo(r.quota);
@@ -134,54 +143,52 @@ export default function Analyze() {
     }
   }
 
-  function setMultiplier(idx, m) {
-    setResult((prev) => {
-      const foods = prev.foods.map((f, i) => (i === idx ? { ...f, multiplier: m } : f));
-      return { ...prev, foods };
-    });
+  function setItems(items) {
+    setResult((prev) => ({ ...prev, foods: items }));
   }
 
-  function editField(idx, field, value) {
-    setResult((prev) => {
-      const foods = prev.foods.map((f, i) =>
-        i === idx ? { ...f, [field]: field === 'name' ? value : Number(value) || 0 } : f
-      );
-      return { ...prev, foods };
-    });
-  }
-
-  function deleteItem(idx) {
-    setResult((prev) => ({ ...prev, foods: prev.foods.filter((_, i) => i !== idx) }));
-  }
-
-  function scaledCalories(f) {
-    return Math.round((f.calories || 0) * f.multiplier);
-  }
-  function scaledMacro(f, key) {
-    return Math.round((f[key] || 0) * f.multiplier * 10) / 10;
-  }
-  const totalCal = (result?.foods || []).reduce((s, f) => s + scaledCalories(f), 0);
+  const totalCal = verified
+    ? gtItems.reduce((s, f) => s + Math.round((f.calories || 0) * (f.multiplier || 1)), 0)
+    : (result?.foods || []).reduce((s, f) => s + Math.round((f.calories || 0) * (f.multiplier || 1)), 0);
 
   async function logIt() {
-    if (!result || result.foods.length === 0) return;
+    const items = verified ? gtItems : (result?.foods || []);
+    if (!result || items.length === 0) return;
     setLogging(true);
     try {
       let thumb = null;
       if (preview) thumb = await makeThumbnail(preview, 256, 0.6);
+      const raw = rawResultRef.current;
+      const ai_estimate = raw
+        ? {
+            model_name: aiSettingsModelName(),
+            prompt_version: '1.0',
+            raw_model_output: raw,
+            final_items: verified ? null : items.map(cleanItem),
+            ground_truth_items: verified ? items.map(cleanItem) : null,
+            is_verified: verified,
+            // Verified meals keep the 1024px image for future model re-runs.
+            image: verified ? base64 : undefined,
+            image_mime: 'image/jpeg'
+          }
+        : undefined;
       await api.addMeal({
         date: selectedDate || todayStr(),
         meal_type: mealType,
         photo_thumb: thumb,
-        items: result.foods.map((f) => ({
+        items: items.map((f) => ({
           name: f.name,
-          portion: f.portion_estimate || '',
+          portion: f.portion_estimate || f.portion || '',
           multiplier: f.multiplier,
-          calories: scaledCalories(f),
-          protein_g: scaledMacro(f, 'protein_g'),
-          carbs_g: scaledMacro(f, 'carbs_g'),
-          fat_g: scaledMacro(f, 'fat_g'),
-          fiber_g: scaledMacro(f, 'fiber_g')
-        }))
+          grams: f.grams ?? null,
+          confidence: f.confidence || null,
+          calories: Math.round((f.calories || 0) * (f.multiplier || 1)),
+          protein_g: Math.round((f.protein_g || 0) * (f.multiplier || 1) * 10) / 10,
+          carbs_g: Math.round((f.carbs_g || 0) * (f.multiplier || 1) * 10) / 10,
+          fat_g: Math.round((f.fat_g || 0) * (f.multiplier || 1) * 10) / 10,
+          fiber_g: Math.round((f.fiber_g || 0) * (f.multiplier || 1) * 10) / 10
+        })),
+        ai_estimate
       });
       navigate('/');
     } catch (e) {
@@ -189,6 +196,27 @@ export default function Analyze() {
     } finally {
       setLogging(false);
     }
+  }
+
+  function cleanItem(f) {
+    return {
+      name: f.name,
+      grams: f.grams ?? null,
+      portion: f.portion_estimate || f.portion || '',
+      multiplier: f.multiplier || 1,
+      calories: Math.round((f.calories || 0) * (f.multiplier || 1)),
+      protein_g: Math.round((f.protein_g || 0) * (f.multiplier || 1) * 10) / 10,
+      carbs_g: Math.round((f.carbs_g || 0) * (f.multiplier || 1) * 10) / 10,
+      fat_g: Math.round((f.fat_g || 0) * (f.multiplier || 1) * 10) / 10,
+      fiber_g: Math.round((f.fiber_g || 0) * (f.multiplier || 1) * 10) / 10,
+      confidence: f.confidence || null
+    };
+  }
+
+  function aiSettingsModelName() {
+    const s = aiSettingsRef.current;
+    if (s?.aiMode === 'byo') return `byo:${s.byoModel || 'unknown'}`;
+    return 'server';
   }
 
   function reset() {
@@ -292,7 +320,7 @@ export default function Analyze() {
         <div className="mt-4 space-y-3">
           <div className="flex items-center justify-between rounded-xl bg-white px-4 py-3">
             <span className="text-sm text-slate-500">Confidence</span>
-            <ConfidenceBadge level={result.confidence} />
+            <OverallConfidence level={result.confidence} />
           </div>
 
           <div className="flex gap-2">
@@ -304,38 +332,26 @@ export default function Analyze() {
             ))}
           </div>
 
-          {result.foods.map((f, idx) => (
-            <div key={idx} className="rounded-2xl bg-white p-4 shadow-sm">
-              <div className="flex items-start justify-between gap-2">
-                <input
-                  value={f.name}
-                  onChange={(e) => editField(idx, 'name', e.target.value)}
-                  className="flex-1 rounded-lg border border-slate-200 px-2 py-1 text-base font-semibold text-slate-800"
-                />
-                <button onClick={() => deleteItem(idx)} className="rounded-lg p-2 text-slate-400 active:bg-slate-100">
-                  <TrashIcon />
-                </button>
-              </div>
-              <p className="mt-1 text-xs text-slate-400">{f.portion_estimate || 'portion estimate'}</p>
+          {/* Verified meal toggle — build ground truth */}
+          <button
+            onClick={() => { setVerified((v) => !v); if (!verified && gtItems.length === 0) setGtItems([]); }}
+            className={`w-full rounded-xl px-4 py-3 text-left text-sm font-medium ${
+              verified ? 'bg-emerald-500 text-white' : 'bg-white text-slate-600'
+            }`}
+          >
+            ⚖️ {verified ? 'Verified mode ON — enter what you actually weighed' : 'I weighed this — enter exact amounts'}
+          </button>
 
-              <div className="mt-3 flex gap-1.5">
-                {MULTIPLIERS.map((m) => (
-                  <button key={m} onClick={() => setMultiplier(idx, m)}
-                    className={`flex-1 rounded-lg py-1.5 text-xs font-semibold ${
-                      f.multiplier === m ? 'bg-brand-100 text-brand-700' : 'bg-slate-100 text-slate-500'
-                    }`}>{m}x</button>
-                ))}
-              </div>
-
-              <div className="mt-3 grid grid-cols-5 gap-1 text-center">
-                <Macro label="kcal" value={scaledCalories(f)} />
-                <Macro label="P" value={scaledMacro(f, 'protein_g')} color="text-rose-500" />
-                <Macro label="C" value={scaledMacro(f, 'carbs_g')} color="text-amber-500" />
-                <Macro label="F" value={scaledMacro(f, 'fat_g')} color="text-sky-500" />
-                <Macro label="Fib" value={scaledMacro(f, 'fiber_g')} color="text-emerald-500" />
-              </div>
+          {verified ? (
+            <div>
+              <p className="px-1 text-xs text-slate-500">
+                Enter each ingredient with its actual weight, including cooking fat (oil/ghee/butter) as its own item.
+              </p>
+              <MealItemEditor items={gtItems} onChange={setGtItems} />
             </div>
-          ))}
+          ) : (
+            <MealItemEditor items={result.foods} onChange={setItems} showConfidence />
+          )}
 
           <div className="mt-2 rounded-2xl bg-slate-900 p-4 text-white shadow-xl">
             <div className="flex items-center justify-between">
@@ -354,24 +370,8 @@ export default function Analyze() {
   );
 }
 
-function Macro({ label, value, color = 'text-slate-800' }) {
-  return (
-    <div className="rounded-lg bg-slate-50 py-1.5">
-      <div className={`text-sm font-bold ${color}`}>{value}</div>
-      <div className="text-[9px] uppercase text-slate-400">{label}</div>
-    </div>
-  );
-}
-
-function ConfidenceBadge({ level }) {
+function OverallConfidence({ level }) {
   const map = { low: 'bg-rose-100 text-rose-700', medium: 'bg-amber-100 text-amber-700', high: 'bg-emerald-100 text-emerald-700' };
   return <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${map[level] || map.low}`}>{level}</span>;
 }
 
-function TrashIcon() {
-  return (
-    <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-    </svg>
-  );
-}
