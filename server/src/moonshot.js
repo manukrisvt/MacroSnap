@@ -62,7 +62,7 @@ export async function analyzeMealImage(base64Image, mimeType = 'image/jpeg', con
       }
     ],
     temperature: 0.2,
-    max_tokens: 1200
+    max_tokens: 2500
   };
 
   const controller = new AbortController();
@@ -117,5 +117,11 @@ export async function analyzeMealImage(base64Image, mimeType = 'image/jpeg', con
   }
 
   // Strict schema validation + normalization (Phase 2)
-  return validateAIResponse(parsed);
+  try {
+    return validateAIResponse(parsed);
+  } catch (e) {
+    // Attach the raw output so callers can log/diagnose what the model said
+    e.raw = content;
+    throw e;
+  }
 }

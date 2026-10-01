@@ -332,7 +332,16 @@ function AIProviderSection({ ai, setAI, saved, setSaved }) {
               if (btn) btn.textContent = '✅ Key works! Ready to snap.';
               if (btn) btn.className = 'mt-2 text-xs text-brand-600';
             } catch (e) {
-              if (btn) btn.textContent = '❌ ' + (e.message || 'Key test failed');
+              let msg = e.message || 'Key test failed';
+              if (e.status === 401) {
+                msg = '401: key rejected. Check it is from the SELECTED provider (sk-or-v1-… = OpenRouter, sk-… = OpenAI, AIza… = Google with Custom provider).';
+              } else if (e.status === 404) {
+                msg = '404: model not found. Pick a different model for this provider.';
+              } else if (e.code === 'BAD_JSON' || e.code === 'BAD_SCHEMA') {
+                // Key itself works — the tiny test image just confused the model.
+                msg = '✅ Key works (auth OK) — model responded. Ready to snap.';
+              }
+              if (btn) btn.textContent = '❌ ' + msg;
               if (btn) btn.className = 'mt-2 text-xs text-rose-500';
             }
           }}

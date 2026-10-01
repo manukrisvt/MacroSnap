@@ -38,7 +38,7 @@ export async function analyzeMealImageDirect(dataUrl, settings, context = {}) {
       }
     ],
     temperature: 0.2,
-    max_tokens: 1200
+    max_tokens: 2500
   };
 
   const controller = new AbortController();
@@ -93,5 +93,10 @@ export async function analyzeMealImageDirect(dataUrl, settings, context = {}) {
   }
 
   // Strict schema validation + normalization (Phase 2)
-  return validateAIResponse(parsed);
+  try {
+    return validateAIResponse(parsed);
+  } catch (e) {
+    e.raw = content;
+    throw e;
+  }
 }

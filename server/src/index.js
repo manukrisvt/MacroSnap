@@ -228,7 +228,7 @@ app.post('/api/reanalyze', async (req, res) => {
     const result = await analyzeMealImage(image, mimeType, { hint, mealSource, previousOutput, correctionText, clarifyingAnswer });
     res.json(result);
   } catch (err) {
-    console.error('[reanalyze] error:', err.message);
+    console.error('[reanalyze] error:', err.message, err.code, err.raw ? `RAW: ${String(err.raw).slice(0, 500)}` : '');
     res.status(502).json({ error: err.message, code: err.code, fallback: true });
   }
 });
