@@ -109,6 +109,7 @@ export async function login(email, password) {
     err.code = 'WRONG_PASSWORD';
     throw err;
   }
+  await db.run('UPDATE users SET last_login=$1 WHERE id=$2', [Date.now(), user.id]);
   return { userId: user.id, token: createToken(user.id) };
 }
 
@@ -258,6 +259,7 @@ export async function appleSignIn(identityToken) {
       user = { id: userId };
     }
   }
+  await db.run('UPDATE users SET last_login=$1 WHERE id=$2', [Date.now(), user.id]);
   return { userId: user.id, token: createToken(user.id), email };
 }
 

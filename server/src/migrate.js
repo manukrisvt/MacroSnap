@@ -85,6 +85,13 @@ const MIGRATIONS = [
       -- Apple sign-in accounts have no password; allow NULL pass_hash.
       ALTER TABLE users ALTER COLUMN pass_hash DROP NOT NULL;
     `
+  },
+  {
+    name: '007_last_login_tracking',
+    sql: `
+      -- Track the most recent login per user for admin activity stats.
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login BIGINT;
+    `
   }
 ];
 

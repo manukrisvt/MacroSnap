@@ -95,6 +95,29 @@ app.post('/api/feedback', async (req, res) => {
   }
 });
 
+// ---------- admin: activity stats ----------
+app.get('/api/admin/stats', async (req, res) => {
+  const adminKey = req.headers['x-admin-key'];
+  if (adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ error: 'Unauthorized.' });
+  }
+  try {
+    const h24 = Date.now() - 24 * 3600 * 1000;
+    const h6 = Date.now() - 6 * 3600 * 1000;
+    const [signups, logins, meals, snaps, totals] = await Promise.all([
+      db.all(`SELECT id, email, name, created_at FROM users WHERE created_at > $1 ORDER BY created_at DESC`, [h24]),
+      db.all(`SELECT id, email, last_login FROM users WHERE last_login > $1 ORDER BY last_login DESC`, [h6]),
+      db.all(`SELECT m.id, m.user_id, u.email, m.meal_type, m.created_at FROM meals m LEFT JOIN users u ON u.id = m.user_id WHERE m.created_at > $1 ORDER BY m.created_at DESC LIMIT 20`, [h24]),
+      db.all(`SELECT l.user_id, u.email, count(*) as snaps, max(l.created_at) as last_snap FROM usage_log l LEFT JOIN users u ON u.id = l.user_id WHERE l.endpoint = 'analyze' AND l.created_at > $1 GROUP BY l.user_id, u.email ORDER BY snaps DESC`, [h24]),
+      db.get(`SELECT (SELECT count(*) FROM users) as total_users, (SELECT count(*) FROM meals) as total_meals, (SELECT count(*) FROM usage_log WHERE endpoint='analyze') as total_snaps`)
+    ]);
+    res.json({ signups_24h: signups, logins_6h: logins, meals_24h: meals, snaps_24h: snaps, totals });
+  } catch (err) {
+    console.error('[admin/stats] error:', err.message);
+    res.status(500).json({ error: 'Failed to fetch stats.' });
+  }
+});
+
 // ---------- admin: view feedback ----------
 app.get('/api/admin/feedback', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
