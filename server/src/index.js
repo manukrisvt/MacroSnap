@@ -120,6 +120,35 @@ app.get('/api/admin/stats', async (req, res) => {
   }
 });
 
+// ---------- admin: fix misdated meals (one-time timezone bug cleanup) ----------
+// Body: { fixes: [{ id: <meal_id>, date: "YYYY-MM-DD" }] }
+app.post('/api/admin/fix-meal-dates', async (req, res) => {
+  const adminKey = req.headers['x-admin-key'];
+  if (adminKey !== process.env.ADMIN_KEY) {
+    return res.status(403).json({ error: 'Unauthorized.' });
+  }
+  try {
+    const fixes = req.body?.fixes || [];
+    if (!Array.isArray(fixes) || fixes.length === 0) {
+      return res.status(400).json({ error: 'fixes array required.' });
+    }
+    const results = [];
+    for (const f of fixes) {
+      if (!f.id || !/^\d{4}-\d{2}-\d{2}$/.test(f.date || '')) {
+        results.push({ id: f.id, ok: false, error: 'invalid' });
+        continue;
+      }
+      const r = await db.run('UPDATE meals SET date=$1 WHERE id=$2 RETURNING id', [f.date, f.id]);
+      const updated = r.rows?.length || r.changes || 0;
+      results.push({ id: f.id, date: f.date, ok: updated > 0 });
+    }
+    res.json({ results });
+  } catch (err) {
+    console.error('[admin/fix-meal-dates] error:', err.message);
+    res.status(500).json({ error: 'Failed.' });
+  }
+});
+
 // ---------- admin: view feedback ----------
 app.get('/api/admin/feedback', async (req, res) => {
   const adminKey = req.headers['x-admin-key'];
