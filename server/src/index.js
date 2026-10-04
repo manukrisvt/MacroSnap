@@ -19,7 +19,9 @@ app.use((req, res, next) => {
 });
 
 const PORT = process.env.PORT || 8787;
-const today = () => new Date().toISOString().slice(0, 10);
+// Local date on the server (Railway runs UTC; meals are dated by the client's
+// local date string, so the server must not shift dates when comparing).
+const today = () => new Date().toLocaleDateString('en-CA');
 
 // ---------- auth routes (rate limited) ----------
 app.post('/api/signup', rateLimit(), async (req, res) => {

@@ -29,7 +29,7 @@ async function saveBadges(badges) {
 
 // Called when user logs a meal — updates streak and checks for new badges
 export async function onMealLogged(totalMeals, totalCalories, streakDays) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = new Date().toLocaleDateString('en-CA'); // local date as YYYY-MM-DD
   const lastLog = await getLastLogDate();
   let newStreak = streakDays || 0;
 

@@ -57,7 +57,7 @@ export default function History() {
   const month = viewDate.getMonth();
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const todayStr = new Date().toISOString().slice(0, 10);
+  const todayStr = new Date().toLocaleDateString('en-CA'); // local date as YYYY-MM-DD
 
   const cells = [];
   for (let i = 0; i < firstDay; i++) cells.push(null);

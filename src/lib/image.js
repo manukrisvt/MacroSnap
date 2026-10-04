@@ -51,7 +51,13 @@ export function makeThumbnail(dataUrl, maxW = 256, quality = 0.6) {
 }
 
 export function todayStr() {
-  return new Date().toISOString().slice(0, 10);
+  // Local date (not UTC!) — toISOString() shifts the date for non-UTC timezones
+  // after 8pm ET, which stamped evening meals with the wrong day.
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 export function formatDate(d) {
