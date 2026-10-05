@@ -7,6 +7,7 @@ import { BUCKET_LABELS } from '../../shared/mealTags.js';
 export default function Trends() {
   const [range, setRange] = useState(7);
   const [data, setData] = useState([]);
+  const [longData, setLongData] = useState([]); // 90 days, for the weekly long view
   const [goal, setGoal] = useState(2000);
   const [patterns, setPatterns] = useState(null);
 
@@ -14,6 +15,10 @@ export default function Trends() {
     api.history(range).then(setData);
     api.settings().then((s) => setGoal(Number(s.calorie_goal) || 2000));
   }, [range]);
+
+  useEffect(() => {
+    api.history(90).then(setLongData).catch(() => setLongData([]));
+  }, []);
 
   useEffect(() => {
     api.patterns(90).then(setPatterns).catch(() => setPatterns(null));
@@ -66,10 +71,74 @@ export default function Trends() {
 
       <WeekCompare cals={cals} pros={pros} goal={goal} />
 
+      {/* Weekly averages over months — the long view (daily is too noisy) */}
+      <WeeklyAverages data={longData} goal={goal} />
+
       {/* Generated insights — the compare/contrast, in words */}
       {patterns && <Insights patterns={patterns} cals={cals} goal={goal} />}
 
       <Patterns patterns={patterns} />
+    </div>
+  );
+}
+
+/** Group logged days into Mon-keyed weeks; average per week. Shows the long trend. */
+function WeeklyAverages({ data, goal }) {
+  const weeks = {};
+  for (const d of data) {
+    const wk = mondayOfStr(d.date);
+    weeks[wk] = weeks[wk] || { cals: [], pros: [] };
+    weeks[wk].cals.push(Number(d.calories) || 0);
+    weeks[wk].pros.push(Number(d.protein_g) || 0);
+  }
+  const keys = Object.keys(weeks).sort();
+  if (keys.length < 2) return null;
+  const wkCals = keys.map((k) => Math.round(weeks[k].cals.reduce((a, b) => a + b, 0) / weeks[k].cals.length));
+  const wkPros = keys.map((k) => Math.round(weeks[k].pros.reduce((a, b) => a + b, 0) / weeks[k].pros.length));
+  const fmt = (wk) => new Date(wk + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  return (
+    <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-700">Weekly averages</h2>
+      <p className="mt-0.5 text-[11px] text-slate-400">Avg per logged day, by week — the long view</p>
+      <div className="mt-2">
+        <div className="text-[11px] font-medium text-slate-500">Calories <span className="text-slate-400">(goal {goal})</span></div>
+        <BarSeries values={wkCals} labels={keys.map(fmt)} goal={goal} color="#10b981" />
+      </div>
+      <div className="mt-3">
+        <div className="text-[11px] font-medium text-slate-500">Protein (g)</div>
+        <BarSeries values={wkPros} labels={keys.map(fmt)} color="#f43f5e" />
+      </div>
+    </div>
+  );
+}
+
+function mondayOfStr(dateStr) {
+  const d = new Date(dateStr + 'T00:00:00');
+  const day = (d.getDay() + 6) % 7;
+  d.setDate(d.getDate() - day);
+  return d.toLocaleDateString('en-CA');
+}
+
+/** Simple bar series with goal line — clearer than a line for weekly buckets. */
+function BarSeries({ values, labels, goal, color }) {
+  const max = Math.max(goal || 0, ...values, 1);
+  return (
+    <div>
+      <div className="relative mt-1 flex h-24 items-end gap-1">
+        {goal != null && (
+          <div className="absolute inset-x-0 border-t border-dashed border-slate-300" style={{ bottom: `${(goal / max) * 100}%` }} />
+        )}
+        {values.map((v, i) => (
+          <div key={i} className="group relative flex-1" title={`${labels[i]}: ${v}`}>
+            <div className="w-full rounded-t-md" style={{ height: `${Math.max((v / max) * 96, 2)}px`, backgroundColor: color, opacity: 0.85 }} />
+          </div>
+        ))}
+      </div>
+      <div className="mt-1 flex gap-1">
+        {labels.map((l, i) => (
+          <div key={i} className="flex-1 truncate text-center text-[8px] text-slate-400">{l}</div>
+        ))}
+      </div>
     </div>
   );
 }
