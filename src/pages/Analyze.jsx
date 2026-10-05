@@ -12,7 +12,7 @@ import MealItemEditor from '../components/MealItemEditor.jsx';
 import FatSelector from '../components/FatSelector.jsx';
 import { computeFatItem, defaultFatLevel } from '../../shared/fatConfig.js';
 import { matchRecipe, scaleRecipeToGrams } from '../../shared/recipeLogic.js';
-import { BUCKET_LABELS } from '../../shared/mealTags.js';
+import { BUCKET_LABELS, mergeTags } from '../../shared/mealTags.js';
 
 const isNative = Capacitor.isNativePlatform();
 // App Store builds: no purchase path in-app (Apple IAP rules).
@@ -592,16 +592,22 @@ export default function Analyze() {
             </div>
           )}
 
-          {/* AI classification chips */}
-          {result.tags && (
-            <div className="flex flex-wrap gap-1.5">
-              {['source', 'processing', 'profile'].map((b) => result.tags[b] && (
-                <span key={b} className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium capitalize text-slate-600">
-                  {BUCKET_LABELS[result.tags[b]] || result.tags[b].replace(/_/g, ' ')}
-                </span>
-              ))}
-            </div>
-          )}
+          {/* AI classification chips — AI tags merged with retroactive fallback so they always show */}
+          {(() => {
+            const tags = mergeTags(result.tags, result.foods);
+            const chips = ['source', 'processing', 'profile'].map((b) => tags[b] && { b, v: tags[b] });
+            const visible = chips.filter(Boolean);
+            if (!visible.length) return null;
+            return (
+              <div className="flex flex-wrap gap-1.5">
+                {visible.map(({ b, v }) => (
+                  <span key={b} className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium capitalize text-slate-600">
+                    {BUCKET_LABELS[v] || v.replace(/_/g, ' ')}
+                  </span>
+                ))}
+              </div>
+            );
+          })()}
 
           {/* Items */}
           {verified ? (

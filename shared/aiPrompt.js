@@ -27,7 +27,7 @@ Rules:
 - If ANY item is low confidence, include AT MOST ONE "clarifying_question": { "question": "...", "options": ["...", "..."] } with 2-4 short answer options that would most improve the estimate. Otherwise null.
 - "grams" is your best estimate of the visible portion weight in grams.
 - If multiple foods, list each separately.
-- "tags" classifies the WHOLE meal: "source" is where it looks like it was made (home-cooked, restaurant, or packaged/ready-to-eat); "processing" is the dominant processing level of the foods; "profile" is the dominant macro character. Choose the single best value for each.
+- "tags" classifies the WHOLE meal and is REQUIRED (never omit it): "source" is where it looks like it was made (home, restaurant, or packaged/ready-to-eat); "processing" is the dominant processing level of the foods (fresh, minimally_processed, or ultra_processed); "profile" is the dominant macro character (high_protein, balanced, carb_heavy, high_fat, or high_sugar). Choose the single best value for each — never null.
 - Numbers must be integers or floats, not strings.
 - Output ONLY the JSON object.`;
 
