@@ -63,7 +63,48 @@ export default function Trends() {
         </div>
       </div>
 
+      <WeekCompare cals={cals} pros={pros} goal={goal} />
+
       <Patterns patterns={patterns} />
+    </div>
+  );
+}
+
+/** This week (last 7 entries) vs the previous 7 — the compare/contrast card. */
+function WeekCompare({ cals, pros, goal }) {
+  if (cals.length < 8) return null;
+  const cur = cals.slice(-7), prev = cals.slice(-14, -7);
+  const curP = pros.slice(-7), prevP = pros.slice(-14, -7);
+  const avgCur = avg(cur), avgPrev = avg(prev);
+  const pCur = avg(curP), pPrev = avg(prevP);
+  const calDelta = avgPrev ? Math.round(((avgCur - avgPrev) / avgPrev) * 100) : null;
+  const proDelta = pPrev ? Math.round(((pCur - pPrev) / pPrev) * 100) : null;
+  return (
+    <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
+      <h2 className="text-sm font-semibold text-slate-700">This week vs last week</h2>
+      <p className="mt-0.5 text-[11px] text-slate-400">Last 7 logged days vs the 7 before that</p>
+      <div className="mt-3 grid grid-cols-2 gap-3">
+        <CompareCell label="Avg calories" cur={avgCur} prev={avgPrev} delta={calDelta} goodWhenLower={avgCur > goal} />
+        <CompareCell label="Avg protein (g)" cur={pCur} prev={pPrev} delta={proDelta} goodWhenLower={false} />
+      </div>
+    </div>
+  );
+}
+
+function CompareCell({ label, cur, prev, delta, goodWhenLower }) {
+  const up = delta != null && delta > 0;
+  const flat = delta == null || delta === 0;
+  const good = flat ? null : (goodWhenLower ? !up : up);
+  const color = flat ? 'text-slate-400' : good ? 'text-emerald-600' : 'text-rose-600';
+  const arrow = flat ? '—' : up ? '↑' : '↓';
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <div className="text-[10px] uppercase tracking-wide text-slate-400">{label}</div>
+      <div className="mt-1 flex items-baseline gap-2">
+        <span className="text-xl font-black text-slate-800">{cur}</span>
+        <span className={`text-xs font-bold ${color}`}>{arrow} {flat ? '' : `${Math.abs(delta)}%`}</span>
+      </div>
+      <div className="text-[10px] text-slate-400">was {prev}</div>
     </div>
   );
 }
@@ -74,13 +115,90 @@ function Patterns({ patterns }) {
     Object.keys(patterns.overall.profile).length > 0
   );
   if (!hasData) return null;
+  const weekKeys = Object.keys(patterns.weeks || {}).sort();
+  const last = weekKeys[weekKeys.length - 1];
+  const prev = weekKeys[weekKeys.length - 2];
   return (
     <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
-      <h2 className="text-sm font-semibold text-slate-700">Eating patterns</h2>
-      <p className="mt-0.5 text-[11px] text-slate-400">How your meals break down over the last 90 days</p>
-      <BucketBar title="Food quality" data={patterns.overall.processing} order={['fresh', 'minimally_processed', 'ultra_processed']} />
-      <BucketBar title="Meal profile" data={patterns.overall.profile} order={['high_protein', 'balanced', 'carb_heavy', 'high_fat', 'high_sugar']} />
+      <h2 className="text-sm font-semibold text-slate-700">Eating patterns over time</h2>
+      <p className="mt-0.5 text-[11px] text-slate-400">Weekly food quality — spot drift before it becomes a habit</p>
+
+      {/* Weekly stacked bars: processing mix per week */}
+      {weekKeys.length > 0 && (
+        <WeeklyStack weeks={patterns.weeks} weekKeys={weekKeys.slice(-8)} bucket="processing" />
+      )}
+
+      {/* This week vs last week, quality deltas */}
+      {last && prev && <QualityDelta cur={patterns.weeks[last].processing} prev={patterns.weeks[prev].processing} />}
+
+      {/* Overall 90-day mix */}
+      <div className="mt-4 border-t border-slate-100 pt-3">
+        <div className="text-[11px] font-medium text-slate-500">Overall · last 90 days</div>
+        <BucketBar title="Food quality" data={patterns.overall.processing} order={['fresh', 'minimally_processed', 'ultra_processed']} />
+        <BucketBar title="Meal profile" data={patterns.overall.profile} order={['high_protein', 'balanced', 'carb_heavy', 'high_fat', 'high_sugar']} />
+      </div>
     </div>
+  );
+}
+
+/** Stacked weekly bars for one bucket — the "over days" view. */
+function WeeklyStack({ weeks, weekKeys, bucket }) {
+  const order = bucket === 'processing'
+    ? ['fresh', 'minimally_processed', 'ultra_processed']
+    : ['high_protein', 'balanced', 'carb_heavy', 'high_fat', 'high_sugar'];
+  const colors = { fresh: '#10b981', minimally_processed: '#f59e0b', ultra_processed: '#ef4444', high_protein: '#3b82f6', balanced: '#10b981', carb_heavy: '#f59e0b', high_fat: '#a855f7', high_sugar: '#ef4444' };
+  const fmt = (wk) => {
+    const d = new Date(wk + 'T00:00:00');
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+  };
+  return (
+    <div className="mt-3">
+      <div className="flex h-24 items-end gap-1.5">
+        {weekKeys.map((wk) => {
+          const data = weeks[wk][bucket] || {};
+          return (
+            <div key={wk} className="flex-1" title={`${fmt(wk)}: ${order.filter(k => data[k]).map(k => `${BUCKET_LABELS[k]} ${data[k]}%`).join(', ')}`}>
+              <div className="flex h-20 w-full flex-col-reverse overflow-hidden rounded-md">
+                {order.filter((k) => data[k] > 0).map((k) => (
+                  <div key={k} style={{ height: `${data[k]}%`, backgroundColor: colors[k] }} />
+                ))}
+              </div>
+              <div className="mt-1 text-center text-[8px] text-slate-400">{fmt(wk)}</div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+        {order.map((k) => (
+          <span key={k} className="flex items-center gap-1 text-[10px] text-slate-500">
+            <span className="inline-block h-2 w-2 rounded-full" style={{ backgroundColor: colors[k] }} />
+            {BUCKET_LABELS[k] || k}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** "Fresh ↑ 12% · Ultra-processed ↓ 8%" — the contrast, in words. */
+function QualityDelta({ cur, prev }) {
+  const parts = [];
+  for (const k of ['fresh', 'ultra_processed']) {
+    if (cur[k] == null && prev[k] == null) continue;
+    const d = (cur[k] || 0) - (prev[k] || 0);
+    if (d === 0) continue;
+    const good = k === 'fresh' ? d > 0 : d < 0;
+    parts.push(
+      <span key={k} className={good ? 'text-emerald-600' : 'text-rose-600'}>
+        {BUCKET_LABELS[k]} {d > 0 ? '↑' : '↓'} {Math.abs(d)}pt
+      </span>
+    );
+  }
+  if (!parts.length) return null;
+  return (
+    <p className="mt-2 text-[11px] font-medium text-slate-500">
+      vs last week: {parts.reduce((acc, p, i) => [acc, i > 0 && ' · ', p])}
+    </p>
   );
 }
 
