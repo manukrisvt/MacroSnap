@@ -19,8 +19,9 @@ export default function Trends() {
     api.patterns(90).then(setPatterns).catch(() => setPatterns(null));
   }, []);
 
-  const cals = data.map((d) => d.calories);
-  const pros = data.map((d) => d.protein_g);
+  // Defensive: server may return numbers as strings (pg bigint) — always coerce.
+  const cals = data.map((d) => Number(d.calories) || 0);
+  const pros = data.map((d) => Number(d.protein_g) || 0);
   const maxCal = Math.max(goal, ...cals, 1);
   const maxPro = Math.max(...pros, 1);
 
@@ -64,6 +65,9 @@ export default function Trends() {
       </div>
 
       <WeekCompare cals={cals} pros={pros} goal={goal} />
+
+      {/* Generated insights — the compare/contrast, in words */}
+      {patterns && <Insights patterns={patterns} cals={cals} goal={goal} />}
 
       <Patterns patterns={patterns} />
     </div>
@@ -109,6 +113,62 @@ function CompareCell({ label, cur, prev, delta, goodWhenLower }) {
   );
 }
 
+/** Turn the data into 2-4 plain-language insights users can act on. */
+function Insights({ patterns, cals, goal }) {
+  const tips = [];
+  const overall = patterns?.overall;
+  const weekdays = patterns?.weekdays;
+
+  // 1. Goal adherence
+  if (cals.length >= 3) {
+    const a = avg(cals);
+    const off = Math.round(((a - goal) / goal) * 100);
+    if (off > 15) tips.push({ icon: '🎯', text: `You're averaging ${a} kcal — ${off}% above your ${goal} goal. Trimming ~${Math.round((a - goal) / 3)} kcal per meal gets you back on target.` });
+    else if (off < -15) tips.push({ icon: '🎯', text: `You're averaging ${a} kcal — ${Math.abs(off)}% below your goal. Consistently under-eating can stall your progress too.` });
+    else tips.push({ icon: '✅', text: `Nice — your ${a} kcal average is within 15% of your ${goal} goal.` });
+  }
+
+  // 2. Quality trend (this week vs last)
+  const wk = Object.keys(patterns?.weeks || {}).sort();
+  if (wk.length >= 2) {
+    const cur = patterns.weeks[wk[wk.length - 1]].processing || {};
+    const prev = patterns.weeks[wk[wk.length - 2]].processing || {};
+    const dFresh = (cur.fresh || 0) - (prev.fresh || 0);
+    const dUP = (cur.ultra_processed || 0) - (prev.ultra_processed || 0);
+    if (dUP >= 10) tips.push({ icon: '⚠️', text: `Ultra-processed food jumped ${dUP} points this week vs last. One home-cooked meal a day turns that around.` });
+    else if (dFresh >= 10) tips.push({ icon: '📈', text: `Fresh/whole foods up ${dFresh} points this week — keep that streak going.` });
+  }
+
+  // 3. Weekday pattern (best vs worst day)
+  if (weekdays && weekdays.some((d) => Object.keys(d).length)) {
+    const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const freshByDay = weekdays.map((d) => d.fresh || 0);
+    const upByDay = weekdays.map((d) => d.ultra_processed || 0);
+    const bestI = freshByDay.indexOf(Math.max(...freshByDay));
+    const worstI = upByDay.indexOf(Math.max(...upByDay));
+    if (upByDay[worstI] >= 25 && bestI !== worstI) {
+      tips.push({ icon: '📅', text: `${names[worstI]}s are your weakest day (${upByDay[worstI]}% ultra-processed), while ${names[bestI]}s are your strongest (${freshByDay[bestI]}% fresh). Plan ${names[worstI]} meals ahead — that's your leverage day.` });
+    }
+  }
+
+  // 4. Protein share
+  if (overall?.profile && (overall.profile.high_protein || 0) < 20 && Object.keys(overall.profile).length >= 2) {
+    tips.push({ icon: '💪', text: `Only ${overall.profile.high_protein || 0}% of your meals are high-protein. Adding a protein source to one meal a day shifts this fast.` });
+  }
+
+  if (!tips.length) return null;
+  return (
+    <div className="mt-4 space-y-2">
+      {tips.map((t, i) => (
+        <div key={i} className="flex gap-3 rounded-2xl bg-white p-4 shadow-sm">
+          <span className="text-lg leading-none">{t.icon}</span>
+          <p className="text-[13px] leading-snug text-slate-700">{t.text}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Patterns({ patterns }) {
   const hasData = patterns && patterns.overall && (
     Object.keys(patterns.overall.processing).length > 0 ||
@@ -116,20 +176,16 @@ function Patterns({ patterns }) {
   );
   if (!hasData) return null;
   const weekKeys = Object.keys(patterns.weeks || {}).sort();
-  const last = weekKeys[weekKeys.length - 1];
-  const prev = weekKeys[weekKeys.length - 2];
   return (
     <div className="mt-4 rounded-2xl bg-white p-4 shadow-sm">
       <h2 className="text-sm font-semibold text-slate-700">Eating patterns over time</h2>
       <p className="mt-0.5 text-[11px] text-slate-400">Weekly food quality — spot drift before it becomes a habit</p>
 
       {/* Weekly stacked bars: processing mix per week */}
+      {/* Compact weekly mix — kept small; insights above carry the meaning */}
       {weekKeys.length > 0 && (
         <WeeklyStack weeks={patterns.weeks} weekKeys={weekKeys.slice(-8)} bucket="processing" />
       )}
-
-      {/* This week vs last week, quality deltas */}
-      {last && prev && <QualityDelta cur={patterns.weeks[last].processing} prev={patterns.weeks[prev].processing} />}
 
       {/* Overall 90-day mix */}
       <div className="mt-4 border-t border-slate-100 pt-3">
@@ -180,28 +236,6 @@ function WeeklyStack({ weeks, weekKeys, bucket }) {
   );
 }
 
-/** "Fresh ↑ 12% · Ultra-processed ↓ 8%" — the contrast, in words. */
-function QualityDelta({ cur, prev }) {
-  const parts = [];
-  for (const k of ['fresh', 'ultra_processed']) {
-    if (cur[k] == null && prev[k] == null) continue;
-    const d = (cur[k] || 0) - (prev[k] || 0);
-    if (d === 0) continue;
-    const good = k === 'fresh' ? d > 0 : d < 0;
-    parts.push(
-      <span key={k} className={good ? 'text-emerald-600' : 'text-rose-600'}>
-        {BUCKET_LABELS[k]} {d > 0 ? '↑' : '↓'} {Math.abs(d)}pt
-      </span>
-    );
-  }
-  if (!parts.length) return null;
-  return (
-    <p className="mt-2 text-[11px] font-medium text-slate-500">
-      vs last week: {parts.reduce((acc, p, i) => [acc, i > 0 && ' · ', p])}
-    </p>
-  );
-}
-
 function BucketBar({ title, data, order }) {
   const entries = order.filter((k) => data[k] > 0).map((k) => [k, data[k]]);
   if (!entries.length) return null;
@@ -230,7 +264,7 @@ function BucketBar({ title, data, order }) {
   );
 }
 
-function avg(arr) { return arr.length ? Math.round(arr.reduce((a, b) => a + b, 0) / arr.length) : 0; }
+function avg(arr) { return arr.length ? Math.round(arr.reduce((a, b) => a + (Number(b) || 0), 0) / arr.length) : 0; }
 
 function Stat({ label, value }) {
   return (

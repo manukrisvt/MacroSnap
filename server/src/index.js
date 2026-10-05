@@ -631,11 +631,12 @@ app.get('/api/history', async (req, res) => {
      GROUP BY m.date ORDER BY m.date`,
     [req.userId, cutoff]
   );
-  res.json(rows.map(r => ({ ...r, calories: r.calories||0, protein_g: r.protein_g||0 })));
+  // NB: pg returns SUM() (bigint) as a STRING — coerce or client-side math concatenates.
+  res.json(rows.map(r => ({ ...r, calories: Number(r.calories)||0, protein_g: Number(r.protein_g)||0 })));
 });
 
 // ---------- patterns (meal bucket trends) ----------
-import { bucketShares } from '../../shared/mealTags.js';
+import { bucketShares, mergeTags } from '../../shared/mealTags.js';
 app.get('/api/patterns', async (req, res) => {
   const days = Math.min(Number(req.query.days) || 90, 365);
   const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
@@ -650,9 +651,25 @@ app.get('/api/patterns', async (req, res) => {
   const byMeal = {};
   for (const r of meals) {
     byMeal[r.id] = byMeal[r.id] || { date: r.date, meal_type: r.meal_type, items: [] };
-    byMeal[r.id].items.push({ name: r.name, calories: r.calories, protein_g: r.protein_g, carbs_g: r.carbs_g, fat_g: r.fat_g });
+    byMeal[r.id].items.push({ name: r.name, calories: Number(r.calories)||0, protein_g: Number(r.protein_g)||0, carbs_g: Number(r.carbs_g)||0, fat_g: Number(r.fat_g)||0 });
   }
-  res.json(bucketShares(Object.values(byMeal)));
+  const mealList = Object.values(byMeal);
+  const shares = bucketShares(mealList);
+
+  // Weekday quality breakdown (0=Sun..6=Sat) for insight generation.
+  const wdTally = Array.from({ length: 7 }, () => ({}));
+  for (const m of mealList) {
+    const tags = mergeTags(m.tags, m.items);
+    const wd = new Date(m.date + 'T00:00:00').getDay();
+    if (tags.processing) wdTally[wd][tags.processing] = (wdTally[wd][tags.processing] || 0) + 1;
+  }
+  const wdPct = (obj) => {
+    const total = Object.values(obj).reduce((s, n) => s + n, 0);
+    return total ? Object.fromEntries(Object.entries(obj).map(([k, n]) => [k, Math.round((n / total) * 100)])) : {};
+  };
+  shares.weekdays = wdTally.map(wdPct);
+
+  res.json(shares);
 });
 
 // ---------- favorites ----------
