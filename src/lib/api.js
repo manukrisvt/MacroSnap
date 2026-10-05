@@ -101,6 +101,7 @@ export const api = {
   water: (date, delta) => req('/water', { method: 'POST', body: JSON.stringify({ date, delta }) }),
 
   history: (days = 30) => req(`/history?days=${days}`),
+  patterns: (days = 90) => req(`/patterns?days=${days}`),
 
   favorites: () => req('/favorites'),
   addFavorite: (f) => req('/favorites', { method: 'POST', body: JSON.stringify(f) }),

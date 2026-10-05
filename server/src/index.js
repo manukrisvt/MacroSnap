@@ -634,6 +634,27 @@ app.get('/api/history', async (req, res) => {
   res.json(rows.map(r => ({ ...r, calories: r.calories||0, protein_g: r.protein_g||0 })));
 });
 
+// ---------- patterns (meal bucket trends) ----------
+import { bucketShares } from '../../shared/mealTags.js';
+app.get('/api/patterns', async (req, res) => {
+  const days = Math.min(Number(req.query.days) || 90, 365);
+  const cutoff = new Date(Date.now() - days * 86400000).toISOString().slice(0, 10);
+  const meals = await db.all(
+    `SELECT m.id, m.date, m.meal_type, mi.name, mi.calories, mi.protein_g, mi.carbs_g, mi.fat_g
+     FROM meals m JOIN meal_items mi ON mi.meal_id = m.id
+     WHERE m.user_id=$1 AND m.date >= $2
+     ORDER BY m.date`,
+    [req.userId, cutoff]
+  );
+  // group items into meals
+  const byMeal = {};
+  for (const r of meals) {
+    byMeal[r.id] = byMeal[r.id] || { date: r.date, meal_type: r.meal_type, items: [] };
+    byMeal[r.id].items.push({ name: r.name, calories: r.calories, protein_g: r.protein_g, carbs_g: r.carbs_g, fat_g: r.fat_g });
+  }
+  res.json(bucketShares(Object.values(byMeal)));
+});
+
 // ---------- favorites ----------
 app.get('/api/favorites', async (req, res) => {
   res.json(await db.all('SELECT * FROM favorites WHERE user_id=$1 ORDER BY name', [req.userId]));

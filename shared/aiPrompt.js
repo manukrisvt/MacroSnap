@@ -12,6 +12,11 @@ Return STRICT JSON only — no markdown, no commentary. The JSON must match exac
     { "name": "", "grams": 0, "kcal": 0, "protein_g": 0, "carbs_g": 0, "fat_g": 0, "fiber_g": 0, "confidence": "high|medium|low", "assumes_added_fat": false }
   ],
   "visible_fat_cues": [],
+  "tags": {
+    "source": "home|restaurant|packaged",
+    "processing": "fresh|minimally_processed|ultra_processed",
+    "profile": "high_protein|balanced|carb_heavy|high_fat|high_sugar"
+  },
   "clarifying_question": null
 }
 Rules:
@@ -22,6 +27,7 @@ Rules:
 - If ANY item is low confidence, include AT MOST ONE "clarifying_question": { "question": "...", "options": ["...", "..."] } with 2-4 short answer options that would most improve the estimate. Otherwise null.
 - "grams" is your best estimate of the visible portion weight in grams.
 - If multiple foods, list each separately.
+- "tags" classifies the WHOLE meal: "source" is where it looks like it was made (home-cooked, restaurant, or packaged/ready-to-eat); "processing" is the dominant processing level of the foods; "profile" is the dominant macro character. Choose the single best value for each.
 - Numbers must be integers or floats, not strings.
 - Output ONLY the JSON object.`;
 
@@ -74,13 +80,23 @@ export function validateAIResponse(parsed) {
     clarifying = { question: String(q.question), options: q.options.slice(0, 4).map(String) };
   }
 
+  // Meal tags (patterns feature) — validated against allowed values.
+  const t = parsed.tags && typeof parsed.tags === 'object' ? parsed.tags : {};
+  const pick = (v, allowed) => (allowed.includes(v) ? v : null);
+  const tags = {
+    source: pick(t.source, ['home', 'restaurant', 'packaged']),
+    processing: pick(t.processing, ['fresh', 'minimally_processed', 'ultra_processed']),
+    profile: pick(t.profile, ['high_protein', 'balanced', 'carb_heavy', 'high_fat', 'high_sugar'])
+  };
+
   return {
     foods: items, // keep 'foods' key for backward compat with the UI
     items,
     total_calories: items.reduce((s, f) => s + f.calories, 0),
     confidence: items.some((f) => f.confidence === 'low') ? 'low' : items.some((f) => f.confidence === 'medium') ? 'medium' : 'high',
     visible_fat_cues: cues,
-    clarifying_question: clarifying
+    clarifying_question: clarifying,
+    tags
   };
 }
 
