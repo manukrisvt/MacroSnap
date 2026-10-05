@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Capacitor } from '@capacitor/core';
 import { Camera, CameraResultType, CameraSource } from '@capacitor/camera';
@@ -12,6 +12,7 @@ import MealItemEditor from '../components/MealItemEditor.jsx';
 import FatSelector from '../components/FatSelector.jsx';
 import { computeFatItem, defaultFatLevel } from '../../shared/fatConfig.js';
 import { matchRecipe, scaleRecipeToGrams } from '../../shared/recipeLogic.js';
+import { BUCKET_LABELS } from '../../shared/mealTags.js';
 
 const isNative = Capacitor.isNativePlatform();
 // App Store builds: no purchase path in-app (Apple IAP rules).
@@ -127,6 +128,8 @@ export default function Analyze() {
     setError(null);
     setQuotaExceeded(null);
     setFunnyMsg(getRandomFunnyMessage());
+    // Cycle the loading message every 2.5s so the wait feels alive
+    const cycle = setInterval(() => setFunnyMsg(getRandomFunnyMessage()), 2500);
     try {
       const aiSettings = await getAISettings();
       aiSettingsRef.current = aiSettings;
@@ -199,6 +202,7 @@ export default function Analyze() {
         setError(msg);
       }
     } finally {
+      clearInterval(cycle);
       setLoading(false);
     }
   }
@@ -472,7 +476,7 @@ export default function Analyze() {
       {loading && (
         <div className="mt-6 flex flex-col items-center gap-3 text-center">
           <div className="h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-brand-500" />
-          <p className="text-sm font-medium text-slate-600">{funnyMsg}</p>
+          <p className="text-sm font-medium text-slate-600 transition-opacity duration-300">{funnyMsg}</p>
         </div>
       )}
 
@@ -585,6 +589,17 @@ export default function Analyze() {
                 className="ml-2 rounded-lg bg-white px-3 py-1.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
                 Undo
               </button>
+            </div>
+          )}
+
+          {/* AI classification chips */}
+          {result.tags && (
+            <div className="flex flex-wrap gap-1.5">
+              {['source', 'processing', 'profile'].map((b) => result.tags[b] && (
+                <span key={b} className="rounded-full bg-slate-100 px-2.5 py-1 text-[10px] font-medium capitalize text-slate-600">
+                  {BUCKET_LABELS[result.tags[b]] || result.tags[b].replace(/_/g, ' ')}
+                </span>
+              ))}
             </div>
           )}
 

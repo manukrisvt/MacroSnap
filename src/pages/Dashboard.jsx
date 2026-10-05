@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api.js';
 import { todayStr, formatDate } from '../lib/image.js';
 import { getStreak, onMealLogged } from '../lib/gamification.js';
+import { classifyMeal, BUCKET_LABELS } from '../../shared/mealTags.js';
 
 // ─────────────────────────────────────────────────────────────
 // Home — "Calm Ledger × Coach" direction.
@@ -339,11 +340,31 @@ function MealRow({ meal, onChanged }) {
         <p className="truncate text-xs text-slate-400 dark:text-slate-500">
           {meal.items.map((i) => i.name).join(', ').slice(0, 50)}
         </p>
+        <MealChips items={meal.items} />
       </div>
       <p className="text-sm font-bold tabular-nums text-slate-700 dark:text-slate-300">{cal}</p>
       <button onClick={del} className="rounded-lg p-1.5 text-slate-300 active:bg-slate-100 dark:text-slate-600">
         <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
       </button>
+    </div>
+  );
+}
+
+// Small colored chips showing a meal's classification (processing + profile).
+function MealChips({ items }) {
+  const tags = classifyMeal(items);
+  const chips = [
+    tags.processing && { key: tags.processing, cls: tags.processing === 'ultra_processed' ? 'bg-rose-50 text-rose-600' : tags.processing === 'fresh' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600' },
+    tags.profile && { key: tags.profile, cls: tags.profile === 'high_protein' ? 'bg-blue-50 text-blue-600' : tags.profile === 'balanced' ? 'bg-emerald-50 text-emerald-600' : tags.profile === 'high_sugar' ? 'bg-rose-50 text-rose-600' : 'bg-slate-100 text-slate-500' }
+  ].filter(Boolean);
+  if (!chips.length) return null;
+  return (
+    <div className="mt-1 flex flex-wrap gap-1">
+      {chips.map((c) => (
+        <span key={c.key} className={`rounded-full px-2 py-0.5 text-[9px] font-medium ${c.cls}`}>
+          {BUCKET_LABELS[c.key] || c.key}
+        </span>
+      ))}
     </div>
   );
 }
