@@ -455,7 +455,9 @@ export default function Analyze() {
                 <span className="text-sm font-medium text-white/70">kcal</span>
               </div>
               <div className="mt-1 flex items-center gap-2">
-                <OverallConfidence level={result.confidence} />
+                {result.confidence && result.confidence !== 'high' && (
+                  <OverallConfidence level={result.confidence} />
+                )}
                 {result.visible_fat_cues?.length > 0 && (
                   <span className="rounded-full bg-amber-400/90 px-2 py-0.5 text-[10px] font-semibold text-amber-950">oil visible</span>
                 )}
@@ -702,7 +704,9 @@ export default function Analyze() {
 }
 
 function OverallConfidence({ level }) {
-  const map = { low: 'bg-rose-100 text-rose-700', medium: 'bg-amber-100 text-amber-700', high: 'bg-emerald-100 text-emerald-700' };
-  return <span className={`rounded-full px-3 py-1 text-xs font-semibold capitalize ${map[level] || map.low}`}>{level}</span>;
+  // Only low/medium are shown (high is hidden upstream) — worded as an action, not a label.
+  const map = { low: 'bg-rose-100 text-rose-700', medium: 'bg-amber-100 text-amber-700' };
+  const label = { low: '⚠️ Double-check portions', medium: '⚠️ Double-check portions' };
+  return <span className={`rounded-full px-3 py-1 text-xs font-semibold ${map[level] || map.low}`}>{label[level] || label.low}</span>;
 }
 

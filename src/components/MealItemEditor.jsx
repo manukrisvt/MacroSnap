@@ -114,7 +114,7 @@ export default function MealItemEditor({ items, onChange, showConfidence = false
               {f.name}
               <span className="ml-1 text-xs text-brand-500">⇄</span>
             </button>
-            {showConfidence && f.confidence && (
+            {showConfidence && f.confidence && f.confidence !== 'high' && (
               <ConfidenceBadge level={f.confidence} />
             )}
             <button onClick={() => deleteItem(idx)} className="rounded-lg p-2 text-slate-300 active:bg-slate-50">
@@ -215,8 +215,10 @@ function Macro({ label, value, color = 'text-slate-800' }) {
 }
 
 function ConfidenceBadge({ level }) {
-  const map = { low: 'bg-rose-100 text-rose-700', medium: 'bg-amber-100 text-amber-700', high: 'bg-emerald-100 text-emerald-700' };
-  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${map[level] || map.low}`}>{level}</span>;
+  // Only low/medium are shown (high is hidden upstream) — worded as an action, not a label.
+  const map = { low: 'bg-rose-100 text-rose-700', medium: 'bg-amber-100 text-amber-700' };
+  const label = { low: 'Double-check', medium: 'Best guess' };
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${map[level] || map.low}`}>{label[level] || label.low}</span>;
 }
 
 function TrashIcon() {
